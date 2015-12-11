@@ -1,0 +1,14 @@
+GeoNode worldmap app
+--------------------
+
+Use this in conjunction with the worldmap client.
+
+
+Usage
+-----
+
+Add 'geonode.contrib.worldmap' to your installed apps
+
+Add '(r'^worldmap/', include('geonode.contrib.worldmap.urls')),' to the GeoNode urls.py file.
+
+Add 'from geonode.contrib.worldmap import *' to your local_settings.

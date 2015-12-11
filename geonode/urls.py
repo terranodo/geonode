@@ -102,6 +102,7 @@ urlpatterns = patterns('',
                        (r'^groups/', include('geonode.groups.urls')),
                        (r'^documents/', include('geonode.documents.urls')),
                        (r'^services/', include('geonode.services.urls')),
+                       (r'^worldmap/', include('geonode.contrib.worldmap.urls')),
                        url(r'', include(api.urls)),
                        )
 

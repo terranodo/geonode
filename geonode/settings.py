@@ -218,6 +218,7 @@ MAX_DOCUMENT_SIZE = 2  # MB
 
 GEONODE_APPS = (
     # GeoNode internal apps
+    'geonode.contrib.worldmap',
     'geonode.people',
     'geonode.base',
     'geonode.layers',
@@ -247,7 +248,8 @@ GEONODE_CONTRIB_APPS = (
     'geonode.contrib.geogig',
     'geonode.contrib.geosites',
     'geonode.contrib.nlp',
-    'geonode.contrib.slack'
+    'geonode.contrib.slack',
+    'geonode.contrib.worldmap',
 )
 
 # Uncomment the following line to enable contrib apps
