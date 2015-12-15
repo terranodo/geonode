@@ -2,8 +2,11 @@ import json
 
 from django.http import HttpResponse
 
+from geonode.layers.models import Layer
 from geonode.layers.views import _resolve_layer
 from geonode.geoserver.helpers import ogc_server_settings
+
+from .models import LayerStats
 
 
 def addLayerJSON(request, layertitle):
@@ -39,3 +42,29 @@ def addLayerJSON(request, layertitle):
         cfg['abstract'] = layer.abstract
         cfg['styles'] = ''
         return HttpResponse(json.dumps({'layer': cfg}))
+
+
+def ajax_increment_layer_stats(request):
+    if request.method != 'POST':
+        return HttpResponse(
+            content='ajax user lookup requires HTTP POST',
+            status=405,
+            mimetype='text/plain'
+        )
+    if request.POST['layername'] != '':
+        layer_match = Layer.objects.filter(typename=request.POST['layername'])[:1]
+        for l in layer_match:
+            layerStats,created = LayerStats.objects.get_or_create(layer=l)
+            layerStats.visits += 1
+            first_visit = True
+            if request.session.get('visitlayer' + str(l.id), False):
+                first_visit = False
+            else:
+                request.session['visitlayer' + str(l.id)] = True
+            if first_visit or created:
+                layerStats.uniques += 1
+            layerStats.save()
+
+    return HttpResponse(
+                            status=200
+    )
