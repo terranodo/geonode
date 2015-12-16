@@ -889,6 +889,8 @@ try:
 except ImportError:
     pass
 
+from geonode.contrib.worldmap.settings import *
+
 try:
     BING_LAYER = {    
         "source": {
@@ -935,4 +937,3 @@ if 'geonode.geoserver' in INSTALLED_APPS:
     MAP_BASELAYERS = [LOCAL_GEOSERVER]
     MAP_BASELAYERS.extend(baselayers)
 
-from geonode.contrib.worldmap import *
