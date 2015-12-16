@@ -171,10 +171,10 @@ var init = function() {
         localGeoServerBaseUrl: "{{ GEOSERVER_BASE_URL }}",
         localCSWBaseUrl: "http://localhost:8000/catalogue/csw",
         csrfToken: "{{ csrf_token }}",
-        {% if user.is_authenticated %}
-        db_datastore: 'datastore',
+        {% if request.user.is_authenticated %}
+        db_datastore: true,
         {% endif %}
-        authorizedRoles: "{{ user.is_authenticated|yesno:"ROLE_ADMINISTRATOR,ROLE_ANONYMOUS" }}"
+        authorizedRoles: "{{ request.user.is_authenticated|yesno:"ROLE_ADMINISTRATOR,ROLE_ANONYMOUS" }}"
     }, {{ config }});
 
     if (isMobile.any() && config.id) {
@@ -259,7 +259,7 @@ var init = function() {
 </div>
 </div>
         <div id="externalDiv"></div>
-        {% if user.is_authenticated %}
+        {% if request.user.is_authenticated %}
             <div id="uploadDiv"></div>
             {% if DB_DATASTORE  %}
                 <div id="createDiv"></div>
