@@ -889,8 +889,6 @@ try:
 except ImportError:
     pass
 
-from geonode.contrib.worldmap.settings import *
-
 try:
     BING_LAYER = {    
         "source": {
