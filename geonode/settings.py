@@ -923,6 +923,7 @@ if os.name == 'nt':
             #maybe it will be found regardless if not it will throw 500 error
             from django.contrib.gis.geos import GEOSGeometry
 
+from geonode.contrib.worldmap.settings import *
 
 # define the urls after the settings are overridden
 if 'geonode.geoserver' in INSTALLED_APPS:
