@@ -24,3 +24,16 @@ class LayerStats(models.Model):
 
     class Meta:
         verbose_name_plural = 'Layer stats'
+
+
+class SocialExplorerLocation(models.Model):
+    map = models.ForeignKey(Map, related_name="jump_set")
+    url = models.URLField(_("Jump URL"), blank=False, null=False, default='http://www.socialexplorer.com/pub/maps/map3.aspx?g=0&mapi=SE0012&themei=B23A1CEE3D8D405BA2B079DDF5DE9402')
+    title = models.TextField(_("Jump Site"), blank=False, null=False)
+
+    def json(self):
+        logger.debug("JSON url: %s", self.url)
+        return {
+            "url": self.url,
+            "title" :  self.title
+        }
