@@ -19,13 +19,17 @@
 
 
 <h3>{%trans "Permissions"  %}</h3>
- <div id="create_permissions_form"></div>
+ <form id="permission_form">
+  {% include "_permissions.html" %}
+</form>
 
 </div>
 
 </div>
 
-
+{% with resource=layer %}
+{% include "_permissions_form_js.html" %}
+{% endwith %}
 <script type="text/javascript">
 {% autoescape off %}
 
@@ -102,11 +106,6 @@
         vtype: 'keyword'
     });
 
-    var permissionsFieldCreate = new Ext.form.Hidden({
-        name: "permissions",
-        id: "permissions_create"
-    });
-
     var termsAgreeCheck = new Ext.form.Checkbox({
         id: 'create_agreeCheck',
         name: 'agreeCheck',
@@ -138,7 +137,7 @@
             anchor: '95%',
             msgTarget: 'side'
         },
-        items: [map_id, layer_name, layer_title, layer_type, srs, abstract_Field, keywordsField, termsAgreeCheck, permissionsFieldCreate, {
+        items: [map_id, layer_name, layer_title, layer_type, srs, abstract_Field, keywordsField, termsAgreeCheck, {
             xtype: "hidden",
             name: "csrfmiddlewaretoken",
             value: "{{ csrf_token }}"
@@ -149,7 +148,11 @@
             disabled: true,
             handler: function(){
                 if (fp.getForm().isValid()) {
+                    var perm = permissionsString('#permission_form','layers');
                     fp.getForm().submit({
+                        params: {
+                            permissions: JSON.stringify(perm)
+                        },
                         url: form_target,
                         waitMsg: '{% trans "Creating your layer..." %}',
                         success: function(fp, o) {
@@ -177,25 +180,6 @@
             }
         }]
     });
-
-
-    var permissionsEditorCreate = new GeoNode.WorldMapPermissionsEditor({
-        id: "create_permissions_editor",
-        renderTo: "create_permissions_form",
-        userLookup: "{% url 'ajax_lookup_email' %}",
-        customGroup: "{{ CUSTOM_GROUP_NAME }}",
-        listeners: {
-            updated: function(pe) {
-                permissionsFieldCreate.setValue(Ext.util.JSON.encode(pe.writePermissions()));
-            }
-        },
-        permissions: {
-            anonymous: 'layer_readonly',
-            authenticated: 'layer_readonly',
-            users:[]
-        }
-    });
-    permissionsEditorCreate.fireEvent("updated", permissionsEditorCreate);
 
 
     var showTOC = function() {

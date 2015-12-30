@@ -1,22 +1,34 @@
 import json
+import logging
+import uuid
+import math
 
 from django.http import HttpResponse
 from django.shortcuts import render_to_response
 from django.template import RequestContext
 from django.contrib.auth.decorators import login_required
 from django.conf import settings
+from django.utils.html import escape
+from django.db.models import signals
+from django.core.urlresolvers import reverse
 
+from geoserver.catalog import Catalog
+
+from geonode import GeoNodeException
 from geonode.layers.models import Layer
 from geonode.layers.views import _resolve_layer
-from geonode.geoserver.helpers import ogc_server_settings
-from geonode.utils import default_map_config
+from geonode.geoserver.helpers import ogc_server_settings, _user, _password, get_sld_for
+from geonode.geoserver.signals import geoserver_pre_save
+from geonode.utils import default_map_config, llbbox_to_mercator, forward_mercator
 from geonode.base.models import TopicCategory
 from geonode.layers.utils import get_valid_layer_name
 from geonode.people.models import Profile
+from geonode.maps.models import Map, MapLayer
 
 from .models import LayerStats
 from .forms import LayerCreateForm, GEOMETRY_CHOICES
 
+logger = logging.getLogger("geonode.contrib.worldmap")
 
 def addLayerJSON(request, layertitle):
         """
@@ -78,12 +90,11 @@ def ajax_increment_layer_stats(request):
                             status=200
     )
 
-
 def newmap_config(request):
     '''
     View that creates a new map.
 
-    If the query argument 'copy' is given, the inital map is
+    If the query argument 'copy' is given, the initial map is
     a copy of the map with the id specified, otherwise the
     default map configuration is used.  If copy is specified
     and the map specified does not exist a 404 is returned.
@@ -92,21 +103,14 @@ def newmap_config(request):
 
     if request.method == 'GET' and 'copy' in request.GET:
         mapid = request.GET['copy']
-        map_obj = get_object_or_404(Map,pk=mapid)
-
-        if not request.user.has_perm('maps.view_map', obj=map_obj):
-            return HttpResponse(loader.render_to_string('401.html',
-                RequestContext(request, {'error_message':
-                    _("You are not permitted to view or copy this map.")})), status=401)
+        map_obj = _resolve_map(request, mapid, 'base.view_resourcebase')
 
         map_obj.abstract = DEFAULT_ABSTRACT
         map_obj.title = DEFAULT_TITLE
-        map_obj.urlsuffix = DEFAULT_URL
-        if request.user.is_authenticated(): map_obj.owner = request.user
+        if request.user.is_authenticated():
+            map_obj.owner = request.user
         config = map_obj.viewer_json(request.user)
-        config['edit_map'] = True
-        if 'id' in config:
-            del config['id']
+        del config['id']
     else:
         if request.method == 'GET':
             params = request.GET
@@ -116,39 +120,97 @@ def newmap_config(request):
             return HttpResponse(status=405)
 
         if 'layer' in params:
-            map_obj = Map(projection="EPSG:900913")
-            layers, groups, bbox = additional_layers(request,map_obj, params.getlist('layer'))
+            bbox = None
+            map_obj = Map(projection=getattr(settings, 'DEFAULT_MAP_CRS',
+                          'EPSG:900913'))
+            layers = []
+            for layer_name in params.getlist('layer'):
+                try:
+                    layer = _resolve_layer(request, layer_name)
+                except ObjectDoesNotExist:
+                    # bad layer, skip
+                    continue
 
-            #print 'layers', layers
-            #print 'type: ', type(layers[0])
+                if not request.user.has_perm(
+                        'view_resourcebase',
+                        obj=layer.get_self_resource()):
+                    # invisible layer, skip inclusion
+                    continue
+
+                layer_bbox = layer.bbox
+                # assert False, str(layer_bbox)
+                if bbox is None:
+                    bbox = list(layer_bbox[0:4])
+                else:
+                    bbox[0] = min(bbox[0], layer_bbox[0])
+                    bbox[1] = max(bbox[1], layer_bbox[1])
+                    bbox[2] = min(bbox[2], layer_bbox[2])
+                    bbox[3] = max(bbox[3], layer_bbox[3])
+
+                config = layer.attribute_config()
+
+                # Add required parameters for GXP lazy-loading
+                config["title"] = layer.title
+                config["queryable"] = True
+
+                config["srs"] = getattr(settings, 'DEFAULT_MAP_CRS', 'EPSG:900913')
+                config["bbox"] = bbox if config["srs"] != 'EPSG:900913' \
+                    else llbbox_to_mercator([float(coord) for coord in bbox])
+
+                if layer.storeType == "remoteStore":
+                    service = layer.service
+                    maplayer = MapLayer(map=map_obj,
+                                        name=layer.typename,
+                                        ows_url=layer.ows_url,
+                                        layer_params=json.dumps(config),
+                                        visibility=True,
+                                        source_params=json.dumps({
+                                            "ptype": service.ptype,
+                                            "remote": True,
+                                            "url": service.base_url,
+                                            "name": service.name}))
+                else:
+                    maplayer = MapLayer(
+                        map=map_obj,
+                        name=layer.typename,
+                        ows_url=layer.ows_url,
+                        layer_params=json.dumps(config),
+                        visibility=True
+                    )
+
+                layers.append(maplayer)
+
             if bbox is not None:
                 minx, miny, maxx, maxy = [float(c) for c in bbox]
                 x = (minx + maxx) / 2
                 y = (miny + maxy) / 2
 
-                center = forward_mercator((x, y))
+                center = list(forward_mercator((x, y)))
                 if center[1] == float('-inf'):
                     center[1] = 0
 
-                if maxx == minx:
+                BBOX_DIFFERENCE_THRESHOLD = 1e-5
+
+                # Check if the bbox is invalid
+                valid_x = (maxx - minx) ** 2 > BBOX_DIFFERENCE_THRESHOLD
+                valid_y = (maxy - miny) ** 2 > BBOX_DIFFERENCE_THRESHOLD
+
+                if valid_x:
+                    width_zoom = math.log(360 / abs(maxx - minx), 2)
+                else:
                     width_zoom = 15
+
+                if valid_y:
+                    height_zoom = math.log(360 / abs(maxy - miny), 2)
                 else:
-                    width_zoom = math.log(360 / (maxx - minx), 2)
-                if maxy == miny:
                     height_zoom = 15
-                else:
-                    height_zoom = math.log(360 / (maxy - miny), 2)
 
                 map_obj.center_x = center[0]
                 map_obj.center_y = center[1]
                 map_obj.zoom = math.ceil(min(width_zoom, height_zoom))
 
-            config = map_obj.viewer_json(request.user, *(DEFAULT_BASE_LAYERS + layers))
-            config['map']['groups'] = []
-            for group in groups:             
-                if group not in json.dumps(config['map']['groups']):
-                    config['map']['groups'].append({"expanded":"true", "group":group})
-
+            config = map_obj.viewer_json(
+                request.user, *(DEFAULT_BASE_LAYERS + layers))
             config['fromLayer'] = True
         else:
             config = DEFAULT_MAP_CONFIG
@@ -183,10 +245,14 @@ def create_pg_layer(request):
         }))
 
     if request.method == 'POST':
-        from ordereddict import OrderedDict
+        from collections import OrderedDict
+
+        # Disconnect the geoserver pre save signal
+        signals.pre_save.disconnect(geoserver_pre_save, sender=Layer)
+
         layer_form = LayerCreateForm(request.POST)
         if layer_form.is_valid():
-            cat = Layer.objects.gs_catalog
+            cat = Catalog(ogc_server_settings.internal_rest, _user, _password)
 
             # Assume default workspace
             ws = cat.get_workspace(settings.DEFAULT_WORKSPACE)
@@ -195,9 +261,9 @@ def create_pg_layer(request):
                 return HttpResponse(msg, status='400')
 
             # Assume datastore used for PostGIS
-            store = settings.DB_DATASTORE_NAME
+            store = ogc_server_settings.server['DATASTORE']
             if store is None:
-                msg = 'Specified store [%s] not found' % settings.DB_DATASTORE_NAME
+                msg = 'Specified store [%s] not found' % ogc_server_settings.server['DATASTORE']
                 return HttpResponse(msg, status='400')
 
             #TODO: Let users create their own schema
@@ -216,13 +282,13 @@ def create_pg_layer(request):
             # Add geometry to attributes dictionary, based on user input; use OrderedDict to remember order
             #attribute_list.insert(0,[u"the_geom",u"com.vividsolutions.jts.geom." + layer_form.cleaned_data['geom'],{"nillable":False}])
 
-            name = get_valid_layer_name(layer_form.cleaned_data['name'])
+            name = get_valid_layer_name(layer_form.cleaned_data['name'], False)
             permissions = layer_form.cleaned_data["permissions"]
 
             try:
                 logger.info("Create layer %s", name)
                 layer = cat.create_native_layer(settings.DEFAULT_WORKSPACE,
-                                          settings.DB_DATASTORE_NAME,
+                                          ogc_server_settings.server['DATASTORE'],
                                           name,
                                           name,
                                           escape(layer_form.cleaned_data['title']),
@@ -243,7 +309,10 @@ def create_pg_layer(request):
                 geonodeLayer = create_django_record(request.user, layer_form.cleaned_data['title'], layer_form.cleaned_data['keywords'].strip().split(" "), layer_form.cleaned_data['abstract'], layer, permissions)
 
 
-                redirect_to  = reverse('data_metadata', args=[geonodeLayer.typename])
+                # Reconnect the geoserver pre save signal
+                signals.pre_save.connect(geoserver_pre_save, sender=Layer)
+
+                redirect_to  = reverse('layer_metadata', args=[geonodeLayer.typename])
                 if 'mapid' in request.POST and request.POST['mapid'] == 'tab': #if mapid = tab then open metadata form in tabbed panel
                     redirect_to+= "?tab=worldmap_create_panel"
                 elif 'mapid' in request.POST and request.POST['mapid'] != '': #if mapid = number then add to parameters and open in full page
@@ -264,7 +333,7 @@ def create_pg_layer(request):
 
 def check_projection(name, resource):
     # Get a short handle to the gsconfig geoserver catalog
-    cat = Layer.objects.gs_catalog
+    cat = Catalog(ogc_server_settings.internal_rest, _user, _password)
 
     try:
         if resource.latlon_bbox is None:
@@ -350,24 +419,22 @@ def create_django_record(user, title, keywords, abstract, gs_resource, permissio
     except Exception, ex:
                     logger.debug("Attributes could not be saved:[%s]", str(ex))
 
-    poc_contact, __ = Contact.objects.get_or_create(user=user,
-                                           defaults={"name": user.username })
-    author_contact, __ = Contact.objects.get_or_create(user=user,
-                                           defaults={"name": user.username })
+    poc_contact = user
+    author_contact = user
 
     logger.debug('Creating poc and author records for %s', poc_contact)
 
     saved_layer.poc = poc_contact
     saved_layer.metadata_author = author_contact
 
-    saved_layer.save_to_geonetwork()
+    ## TODO, What to do here?
+    #saved_layer.save_to_geonetwork()
 
     # Step 11. Set default permissions on the newly created layer
     # FIXME: Do this as part of the post_save hook
     logger.info('>>> Step 11. Setting default permissions for [%s]', name)
     if permissions is not None:
-        from geonode.maps.views import set_layer_permissions
-        set_layer_permissions(saved_layer, permissions, True)
+        saved_layer.set_permissions(permissions)
 
     # Step 12. Verify the layer was saved correctly and clean up if needed
     logger.info('>>> Step 12. Verifying the layer [%s] was created '
@@ -391,7 +458,7 @@ def create_django_record(user, title, keywords, abstract, gs_resource, permissio
         # FIXME: Implement a verify method that makes sure it was
         # saved in both GeoNetwork and GeoServer
         saved_layer.verify()
-    except NotImplementedError, e:
+    except AttributeError, e:
         logger.exception('>>> FIXME: Please, if you can write python code, '
                          'implement "verify()" '
                          'method in geonode.maps.models.Layer')
@@ -407,25 +474,3 @@ def create_django_record(user, title, keywords, abstract, gs_resource, permissio
     # Return the created layer object
     return saved_layer
 
-
-def ajax_lookup_email(request):
-    if request.method != 'POST':
-        return HttpResponse(
-            content='ajax user lookup requires HTTP POST',
-            status=405,
-            mimetype='text/plain'
-        )
-    elif 'query' not in request.POST:
-        return HttpResponse(
-            content='use a field named "query" to specify a prefix to filter usernames',
-            mimetype='text/plain'
-        )
-    users = Profile.objects.filter(username__startswith=request.POST['query'])
-    json_dict = {
-        'users': [({'email': u.email, 'user':u.username}) for u in users],
-        'count': users.count(),
-    }
-    return HttpResponse(
-        content=json.dumps(json_dict),
-        mimetype='text/plain'
-    )
