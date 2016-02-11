@@ -2,6 +2,9 @@ import re
 from django.db.models import Q
 from django.http import HttpResponse
 from django.conf import settings
+from django.contrib.gis.geos import Polygon
+from django.db import connections
+from django.contrib.gis.db.models import signals
 
 from tastypie.constants import ALL, ALL_WITH_RELATIONS
 from tastypie.resources import ModelResource
@@ -22,6 +25,7 @@ from geonode.maps.models import Map
 from geonode.documents.models import Document
 from geonode.base.models import ResourceBase
 from geonode.base.models import HierarchicalKeyword 
+from geonode.contrib.dynamic.models import ModelDescription, DYNAMIC_DATASTORE, configure_models
 
 from .authorization import GeoNodeAuthorization
 
@@ -32,12 +36,27 @@ from .api import TagResource, RegionResource, ProfileResource, \
 if settings.HAYSTACK_SEARCH:
     from haystack.query import SearchQuerySet  # noqa
 
+
 LAYER_SUBTYPES = {
     'vector': 'dataStore',
     'raster': 'coverageStore',
     'remote': 'remoteStore',
 }
 FILTER_TYPES.update(LAYER_SUBTYPES)
+
+
+def build_query(model, bbox):
+        search_box = Polygon.from_bbox(bbox)
+        
+        django_model = model.get_django_model()
+        sql = """SELECT "{layername}"."fid" FROM "{layername}" \
+                 WHERE ST_Intersects("{layername}"."the_geom", ST_Transform(ST_GeomFromEWKT('srid=4326;{bbox_ewkt}'), \
+                {projection})) LIMIT 1;""".format(
+                                layername=model.name,
+                                bbox_ewkt=search_box.ewkt,
+                                projection=django_model.objects.first().the_geom.srid
+                                )
+        return sql
 
 
 class CommonMetaApi:
@@ -127,8 +146,6 @@ class CommonModelApi(ModelResource):
                 pass
 
         return filtered 
-        
-
 
     def filter_bbox(self, queryset, bbox):
         """
@@ -139,12 +156,25 @@ class CommonModelApi(ModelResource):
         northeast_lng,northeast_lat'
         returns the modified query
         """
-        bbox = bbox.split(
-            ',')  # TODO: Why is this different when done through haystack?
-        bbox = map(str, bbox)  # 2.6 compat - float to decimal conversion
 
+        cursor = connections[DYNAMIC_DATASTORE].cursor()
+
+        bbox = [float(coord) for coord in bbox.split(',')]
+        # Filter by geographic bounding box
+        # Override to support the feature level postgis spatial search
+        # for layers loaded with the dynamic contrib app
+        for model in ModelDescription.objects.all():
+                    
+            try:
+                cursor.execute(build_query(model, bbox))
+                if not cursor.fetchone():
+                    queryset = queryset.exclude(id=model.layer_id)
+            except:
+                pass
+
+        # Keep the default behavior for everything else
         intersects = ~(Q(bbox_x0__gt=bbox[2]) | Q(bbox_x1__lt=bbox[0]) |
-                       Q(bbox_y0__gt=bbox[3]) | Q(bbox_y1__lt=bbox[1]))
+                           Q(bbox_y0__gt=bbox[3]) | Q(bbox_y1__lt=bbox[1]))
 
         return queryset.filter(intersects)
 
@@ -295,10 +325,26 @@ class CommonModelApi(ModelResource):
             )
 
         # Filter by geographic bounding box
+        # Override to support the feature level postgis spatial search
+        # for layers loaded with the dynamic contrib app
         if bbox:
-            left, bottom, right, top = bbox.split(',')
             sqs = (
-                SearchQuerySet() if sqs is None else sqs).exclude(
+                SearchQuerySet() if sqs is None else sqs)
+            
+            cursor = connection.cursor()
+            bbox = [float(coord) for coord in bbox.split(',')]
+            for model in ModelDescription.objects.all():   
+                try:
+                    cursor.execute(build_query(model, bbox))
+
+                    if not cursor.fetchone():
+                        sqs = sqs.exclude(id=model.layer_id)
+                except:
+                    pass
+
+            left, bottom, right, top = bbox        
+            # Keep the default behavior for everything else
+            sqs = sqs.exclude(
                 SQ(
                     bbox_top__lte=bottom) | SQ(
                     bbox_bottom__gte=top) | SQ(
