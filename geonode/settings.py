@@ -42,7 +42,7 @@ DEBUG = TEMPLATE_DEBUG = True
 # Set to True to load non-minified versions of (static) client dependencies
 # Requires to set-up Node and tools that are required for static development
 # otherwise it will raise errors for the missing non-minified dependencies
-DEBUG_STATIC = True 
+DEBUG_STATIC = False 
 
 # This is needed for integration tests, they require
 # geonode to be listening for GeoServer auth requests.
@@ -304,6 +304,7 @@ INSTALLED_APPS = (
     'tastypie',
     'polymorphic',
     'guardian',
+    'geonode.contrib.dynamic',
 
 ) + GEONODE_APPS
 

@@ -441,5 +441,4 @@ def post_save_layer(instance, sender, **kwargs):
 if not has_datastore:
     models.signals.pre_save.connect(configure_models, sender=Layer)
     models.signals.post_save.connect(post_save_layer, sender=Layer)
-else:
-    models.signals.post_save.connect(configure_models, sender=Layer)
+
