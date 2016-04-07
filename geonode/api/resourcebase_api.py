@@ -331,7 +331,7 @@ class CommonModelApi(ModelResource):
             sqs = (
                 SearchQuerySet() if sqs is None else sqs)
             
-            cursor = connection.cursor()
+            cursor = connections[DYNAMIC_DATASTORE].cursor()
             bbox = [float(coord) for coord in bbox.split(',')]
             for model in ModelDescription.objects.all():   
                 try:
@@ -394,25 +394,16 @@ class CommonModelApi(ModelResource):
             # Do the query using the filterset and the query term. Facet the
             # results
             if len(filter_set) > 0:
-                sqs = sqs.filter(id__in=filter_set_ids).facet('type').facet('subtype').facet('owner')\
-                    .facet('keywords').facet('regions').facet('category')
+                sqs = sqs.filter(id__in=filter_set_ids) 
             else:
                 sqs = None
         else:
-            sqs = sqs.facet('type').facet('subtype').facet(
-                'owner').facet('keywords').facet('regions').facet('category')
-
+            sqs = sqs
         if sqs:
-            # Build the Facet dict
-            facets = {}
-            for facet in sqs.facet_counts()['fields']:
-                facets[facet] = {}
-                for item in sqs.facet_counts()['fields'][facet]:
-                    facets[facet][item[0]] = item[1]
 
             # Paginate the results
             paginator = Paginator(sqs, request.GET.get('limit'))
-
+            
             try:
                 page = paginator.page(
                     int(request.GET.get('offset')) /
@@ -443,7 +434,6 @@ class CommonModelApi(ModelResource):
                     "offset": int(getattr(request.GET, 'offset', 0)),
                     "previous": previous_page,
                     "total_count": total_count,
-                    "facets": facets,
                     },
             'objects': map(lambda x: self.get_haystack_api_fields(x), objects),
         }
