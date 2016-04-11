@@ -260,6 +260,7 @@ class CommonModelApi(ModelResource):
                         query,
                         flags=re.UNICODE) if w]
                 for i, search_word in enumerate(words):
+                    search_word = '*'+search_word+'*'
                     if i == 0:
                         sqs = (SearchQuerySet() if sqs is None else sqs) \
                             .filter(
