@@ -249,21 +249,16 @@ class TaggedContentItem(ItemBase):
 class _HierarchicalTagManager(_TaggableManager):
 
     def add(self, *tags):
-        str_tags = set([
-            t
-            for t in tags
-            if not isinstance(t, self.through.tag_model())
-        ])
-        tag_objs = set(tags) - str_tags
+
         # If str_tags has 0 elements Django actually optimizes that to not do a
         # query.  Malcolm is very smart.
         existing = self.through.tag_model().objects.filter(
-            slug__in=str_tags
+            name__in=tags
         )
-        tag_objs.update(existing)
 
-        for new_tag in str_tags - set(t.slug for t in existing):
-            tag_objs.add(HierarchicalKeyword.add_root(name=new_tag))
+        tag_objs = set(existing) 
+        for new_tag in set(tags) - set(t.name for t in existing):
+            tag_objs.add(HierarchicalKeyword.add_root(slug=new_tag, name=new_tag))
 
         for tag in tag_objs:
             self.through.objects.get_or_create(tag=tag, **self._lookup_kwargs())
