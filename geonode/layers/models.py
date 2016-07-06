@@ -113,7 +113,7 @@ class Layer(ResourceBase):
         related_name='layer_default_style',
         null=True,
         blank=True)
-    styles = models.ManyToManyField(Style, related_name='LayerStyles')
+    styles = models.ManyToManyField(Style, related_name='LayerStyles', null=True, blank=True)
 
     charset = models.CharField(max_length=255, default='UTF-8')
 

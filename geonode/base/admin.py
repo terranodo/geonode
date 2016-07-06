@@ -130,5 +130,6 @@ admin.site.register(License, LicenseAdmin)
 
 
 class ResourceBaseAdminForm(autocomplete_light.ModelForm):
-    # keywords = TaggitField(widget=TaggitWidget('TagAutocomplete'), required=False)
-    keywords = TaggitField(widget=TaggitWidget(), required=False)
+    pass
+    #keywords = TaggitField(widget=TaggitWidget('TagAutocomplete'), required=False)
+    #keywords = TaggitField(widget=TaggitWidget(), required=False)
