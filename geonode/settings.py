@@ -834,7 +834,7 @@ CACHES = {
     #     }
 }
 
-LAYER_PREVIEW_LIBRARY = 'geoext'
+LAYER_PREVIEW_LIBRARY = 'leaflet'
 
 SERVICE_UPDATE_INTERVAL = 0
 
