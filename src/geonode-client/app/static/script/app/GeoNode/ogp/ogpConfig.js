@@ -14,13 +14,11 @@ Ext.onReady(function(){
     ]
   };
 
-  GeoNode.solrBackend = 'http://54.83.116.189:8983/solr/search/select';
+  //GeoNode.solrBackend = 'http://54.83.116.189:8983/solr/search/select';
+  GeoNode.solrBackend = 'http://hypersearch.cga.terranodo.io/solr';
 
   var solr = new GeoNode.Solr();
   solr.enableHeatmap();
   GeoNode.solr = solr;
 
 });
-
-
-

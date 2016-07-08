@@ -219,6 +219,7 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
     uploadLayerText: 'Upload Layer',
     createLayerText: 'Create Layer',
     rectifyLayerText: 'Rectify Layer',
+    addTwitterHeatmapLayerText: 'Twitter Heatmap',
     worldmapDataText: 'Search',
     externalDataText: 'External Data',
     leavePageWarningText: 'If you leave this page, unsaved changes will be lost.',
@@ -2097,7 +2098,20 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
         });
     },
 
-
+    initTwitterHeatMapPanel: function(){
+        this.twitterHeatmapPanel = new Ext.Panel({
+            id: 'worldmap_twitterheatmap_panel',
+            title: this.addTwitterHeatmapLayerText,
+            header: false,
+            autoLoad: {url: '/data/create_twitter_heatmap/?tab=true', scripts: true},
+            listeners:{
+                activate : function(panel) {
+                    panel.getUpdater().refresh();
+                }
+            },
+            autoScroll: true
+        });
+    },
 
     initTabPanel: function() {
 //        var feedSourceTab = new gxp.FeedSourceDialog({
@@ -2123,6 +2137,7 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
             }
         }
         this.dataTabPanel.add(this.warperPanel);
+        this.dataTabPanel.add(this.twitterHeatmapPanel);
 
     },
 
@@ -2221,6 +2236,10 @@ var GeoExplorer = Ext.extend(gxp.Viewer, {
 
         if (!this.warperPanel) {
             this.initWarperPanel();
+        }
+
+        if (!this.twitterHeatmapPanel) {
+            this.initTwitterHeatMapPanel();
         }
 
         if (!this.dataTabPanel) {

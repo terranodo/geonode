@@ -863,6 +863,10 @@ a.x-grid3-hd-btn {
     border-radius: 3px;
 }
 
+.x-form-empty-field {
+    color: gray !important;
+}
+
 .x-grid3-scroller {
     border-radius: 1px;
     border: 1px solid #d3d3d3;
@@ -977,6 +981,15 @@ td.x-grid3-hd-over .x-grid3-hd-inner, td.sort-desc .x-grid3-hd-inner, td.sort-as
 
 .x-form-field-wrap, .x-form-field-trigger-wrap, .x-trigger-wrap-focus {
   margin-left: 230px;
+}
+
+.twitter-heatmap-field .x-form-field-wrap, .x-form-element .x-form-field-wrap {
+  margin-left: 0;
+}
+
+.x-form-field-wrap .x-form-spinner-trigger {
+  background: transparent url('spinner.gif') no-repeat 0 0;
+  right: -10px !important;
 }
 
 .x-panel-body .x-panel-body-noheader .x-panel-body-noborder {

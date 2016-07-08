@@ -1,0 +1,375 @@
+
+{% load i18n %}
+
+<style>h3{font-size:1.5em;line-height:1;margin-bottom:1em;margin-top:1em}p{margin-bottom:0.5em}strong{font-weight:bold}caption{background:#ffc}</style>
+
+<div id="tabContainer" style="padding:20px;">
+
+    <div style="position:relative;float:left;width:500px;">
+
+        <h3>{% trans "Instructions"  %}</h3>
+
+        <p>{% trans "Set all parameters of the heatmap file and submit the form to begin the request and to add the retrieved heatmap layer to the map."  %}</p>
+
+        <div id="twitter_heatmap_form"></div>
+
+    </div>
+
+</div>
+
+
+
+<script type="text/javascript">
+{% autoescape off %}
+
+    Ext.QuickTips.init();
+
+    var layer_title = new Ext.form.TextField({
+      id: 'layer_title',
+      fieldLabel: "{% trans 'Title' %}",
+      name: 'layer_title',
+      allowBlank: false
+    });
+
+    var start_date_label = new Ext.form.Label({
+        text: 'Start date:',
+        style: {
+            marginTop: '5px'
+        }
+    });
+
+    var start_df = new Ext.form.DateField({
+        id: 'startdatefield',
+        format: 'Y-m-d',
+        minValue: new Date('2000-01-01'),
+        width: 150,
+        listeners: {
+            'afterrender': function (sdf) {
+                sdf.setValue(sdf.minValue);
+            }
+        }
+    });
+
+    var end_date_label = new Ext.form.Label({
+        text: 'End date:',
+        width: 60,
+        style: {
+            marginTop: '5px',
+            marginLeft: '15px'
+        }
+    });
+
+    var end_df = new Ext.form.DateField({
+        id: 'enddatefield',
+        format: 'Y-m-d',
+        width: 150,
+        maxValue: new Date('2016-12-31'),
+        listeners: {
+            'afterrender': function (sdf) {
+                sdf.setValue(sdf.maxValue);
+            }
+        }
+    });
+
+    var date_container = new Ext.Container({
+        style: {
+            marginBottom: '10px'
+        },
+        layout: 'hbox',
+        cls: 'twitter-heatmap-field',
+        items: [start_date_label, start_df, end_date_label, end_df]
+    });
+
+    var bbox_label = new Ext.form.Label({
+        text: 'Bounding box',
+        width: 85,
+        style: {
+            marginTop: '5px'
+        }
+    });
+
+    var minlat_field = new Ext.form.NumberField({
+        id: 'minlat',
+        allowBlank: false,
+        width: 60,
+        value: -90,
+        minValue: -90,
+        maxValue: 90
+    });
+
+    var minlon_field = new Ext.form.NumberField({
+        id: 'minlon',
+        allowBlank: false,
+        width: 60,
+        value: -180,
+        minValue: -180,
+        maxValue: 180
+    });
+
+    var to_label = new Ext.form.Label({
+        text: 'TO',
+        width: 40,
+        style: {
+            marginTop: '5px',
+            marginLeft: '15px'
+        }
+    });
+
+    var maxlat_field = new Ext.form.NumberField({
+        id: 'maxlat',
+        allowBlank: false,
+        width: 60,
+        value: 90,
+        minValue: -90,
+        maxValue: 90
+    });
+
+    var maxlon_field = new Ext.form.NumberField({
+        id: 'maxlon',
+        allowBlank: false,
+        width: 60,
+        value: 180,
+        macValue: 180,
+        maxValue: 180
+    });
+
+    var bbox_container = new Ext.Container({
+        style: {
+            marginBottom: '10px'
+        },
+        id: 'bbox_container',
+        layout: 'hbox',
+        items: [bbox_label, minlat_field, minlon_field, to_label, maxlat_field, maxlon_field]
+    });
+
+    var keyword_field = new Ext.form.TextField({
+        fieldLabel: 'Keyword',
+        emptyText: 'q.keyword',
+        allowBlank: false,
+        id: 'keyword'
+    });
+
+    var username_field = new Ext.form.TextField({
+        fieldLabel: 'Username',
+        emptyText: 'q.user',
+        id: 'user'
+    });
+
+    var docslimit_field = new Ext.ux.form.SpinnerField({
+        fieldLabel: 'Documents limit',
+        id: "docslimit",
+        minValue: 1,
+        maxValue: 100,
+        defaultValue: 1
+    });
+
+    var sortdocs_combo = new Ext.form.ComboBox({
+        fieldLabel: 'Sort documents by',
+        id: 'docssort',
+        width: 150,
+        cls: 'twitter-heatmap-field',
+        store: new Ext.data.ArrayStore({
+            id: 'docssortstore',
+            fields: [
+                'sorter',
+                'dispText'
+            ],
+            data: [
+                ['score', 'score (default)'],
+                ['time', 'time'],
+                ['distance', 'distance']
+            ]
+        }),
+        valueField: 'sorter',
+        displayField: 'dispText',
+        allowBlank: false,
+        triggerAction: 'all',
+        editable: false,
+        mode: 'local',
+        forceSelection: true,
+        listeners: {
+            'afterrender': function (cb) {
+                cb.setValue(cb.getStore().getAt(0).get('sorter'));
+            }
+        }
+    });
+
+    /**
+     *
+     */
+    var fp = new Ext.FormPanel({
+        id: 'ext_twitter_form',
+        formId: 'twitter_form',
+        renderTo: 'twitter_heatmap_form',
+        width: 500,
+        frame: true,
+        title: "{% trans 'Twitter Heatmap configuration' %}",
+        autoHeight: true,
+        bodyStyle:'padding:5px 5px 0',
+        labelWidth: 80,
+        defaults: {
+            anchor: '95%',
+            msgTarget: 'side'
+        },
+        items: [
+            date_container,
+            bbox_container,
+            keyword_field,
+            username_field,
+            docslimit_field,
+            sortdocs_combo,
+            {
+                xtype: "hidden",
+                name: "csrfmiddlewaretoken",
+                value: "{{ csrf_token }}"
+            }
+        ],
+        buttons: [{
+            id: 'submitBtn',
+            bindForm: true,
+            text: 'Submit request',
+            handler: function(){
+                if (!validateBbox()) {
+                    var msg = "Your bounding box is not valid. Please adjust " +
+                        "the input values and try once again";
+                    Ext.Msg.show({
+                        title: "{% trans 'Error' %}",
+                        msg: msg,
+                        minWidth: 200,
+                        modal: true,
+                        icon: Ext.Msg.ERROR,
+                        buttons: Ext.Msg.OK
+                    });
+                } else {
+                    if (fp.getForm().isValid()) {
+                        var params = getBOPQueryParams(fp.getForm());
+                        Ext.Ajax.request({
+                            url: GeoNode.bopTweetSearchBackend,
+                            method: 'GET',
+                            params: params,
+                            waitMsg: "{% trans 'Searching for tweets...' %}",
+                            success: function(response) {
+                                if (response && response.responseText){
+                                    var respHeatmap = Ext.util.JSON.decode(response.responseText);
+                                    if (respHeatmap["a.matchDocs"] > 0) {
+                                        var heatmap = new GeoNode.BOPHeatmapModel({
+                                          params: params,
+                                          respHeatmap: respHeatmap
+                                        });
+                                        Ext.getCmp('ge_searchWindow').hide();
+                                    } else {
+                                        var msg = "The configured heatmap contains no facets";
+                                        Ext.Msg.show({
+                                            title: "{% trans 'Warning' %}",
+                                            msg: msg,
+                                            minWidth: 200,
+                                            modal: true,
+                                            icon: Ext.Msg.WARN,
+                                            buttons: Ext.Msg.OK
+                                        });
+                                    }
+                                }
+                            },
+                            failure: function(response, form) {
+                                var msg = Ext.util.JSON.decode(response.responseText).message;
+
+                                var error_message = '<ul>';
+                                error_message += '<li>' + msg + '</li>';
+                                error_message += '</ul>'
+
+                                Ext.Msg.show({
+                                    title: "{% trans 'Error' %}",
+                                    msg: error_message,
+                                    minWidth: 200,
+                                    modal: true,
+                                    icon: Ext.Msg.ERROR,
+                                    buttons: Ext.Msg.OK
+                                });
+                            }
+                        });
+                    }
+                }
+            }
+          }, {
+              id: 'cancelBtn',
+              text: 'Cancel request',
+              handler: function(btn,evt){
+                  Ext.getCmp('ge_searchWindow').hide();
+              }
+
+        }]
+    });
+
+    /**
+     * Check if the input lat and lon values in bbox are valid.
+     * E.g. minLat/minLon are not allowed to be great as maxLat/maxLon
+     * and vise verca.
+     */
+    var validateBbox = function(){
+        if (getBboxFieldsValues()[0] > getBboxFieldsValues()[1] ||
+            getBboxFieldsValues()[2] > getBboxFieldsValues()[3]) {
+                return false;
+        }
+        else {
+            return true;
+        }
+    };
+
+    /**
+     * Helper method to gather all relevant values from bbox coordinate fields
+     */
+    var getBboxFieldsValues = function(){
+        return [
+            Ext.getCmp('minlat').getValue(),
+            Ext.getCmp('maxlat').getValue(),
+            Ext.getCmp('minlon').getValue(),
+            Ext.getCmp('maxlon').getValue()
+        ];
+    };
+
+    /**
+     * Prepares a params object to be send to the API with the provided
+     * values from the form
+     */
+    var getBOPQueryParams = function(form){
+        var params = {
+            "q.text": form.findField('keyword').getValue(),
+            "q.time": setTimeRange(),
+            "q.geo": getBBoxString(),
+            "d.docs.limit": form.findField('docslimit').getValue(),
+            "d.docs.sort": form.findField('docssort').getValue(),
+            "a.hm.limit": GeoNode.bopTweetsQueryTerms.heatmapFacetLimit
+        };
+
+        if (!Ext.isEmpty(form.findField('user').getValue())) {
+            params["q.user"] = form.findField('user').getValue();
+        }
+
+        return params;
+    };
+
+    /**
+     * Helper method to assemble the time range parameter in the from, which
+     * can be read by API (e.g. [[2013-03-01 TO 2013-04-01T00:00:00])
+     */
+    var setTimeRange = function(startDate, endDate){
+        if (!startDate) {
+            var startDate = Ext.getCmp('startdatefield').getValue();
+        }
+        if (!endDate) {
+            var endDate = Ext.getCmp('enddatefield').getValue();
+        }
+        return "[" + startDate.format("Y-m-d") + " TO " + endDate.format("Y-m-d") + "T00:00:00]";
+    };
+
+    /**
+     * Helper method to assemble the bounding box parameter in the form, which
+     * can be read by API (e.g. `[-90,-180 TO 90,180]`)
+     */
+    var getBBoxString = function(){
+        var bboxVal = getBboxFieldsValues();
+        return "[" + bboxVal[0] + "," + bboxVal[2] + " TO " + bboxVal[1] + "," + bboxVal[3] + "]"
+    };
+
+{% endautoescape %}
+</script>
