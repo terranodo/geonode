@@ -243,49 +243,8 @@
                 } else {
                     if (fp.getForm().isValid()) {
                         var params = getBOPQueryParams(fp.getForm());
-                        Ext.Ajax.request({
-                            url: GeoNode.bopTweetSearchBackend,
-                            method: 'GET',
-                            params: params,
-                            waitMsg: "{% trans 'Searching for tweets...' %}",
-                            success: function(response) {
-                                if (response && response.responseText){
-                                    var respHeatmap = Ext.util.JSON.decode(response.responseText);
-                                    if (respHeatmap["a.matchDocs"] > 0) {
-                                        var heatmap = new GeoNode.BOPHeatmapModel({
-                                          params: params,
-                                          respHeatmap: respHeatmap
-                                        });
-                                        Ext.getCmp('ge_searchWindow').hide();
-                                    } else {
-                                        var msg = "The configured heatmap contains no facets";
-                                        Ext.Msg.show({
-                                            title: "{% trans 'Warning' %}",
-                                            msg: msg,
-                                            minWidth: 200,
-                                            modal: true,
-                                            icon: Ext.Msg.WARN,
-                                            buttons: Ext.Msg.OK
-                                        });
-                                    }
-                                }
-                            },
-                            failure: function(response, form) {
-                                var msg = Ext.util.JSON.decode(response.responseText).message;
-
-                                var error_message = '<ul>';
-                                error_message += '<li>' + msg + '</li>';
-                                error_message += '</ul>'
-
-                                Ext.Msg.show({
-                                    title: "{% trans 'Error' %}",
-                                    msg: error_message,
-                                    minWidth: 200,
-                                    modal: true,
-                                    icon: Ext.Msg.ERROR,
-                                    buttons: Ext.Msg.OK
-                                });
-                            }
+                        var heatmap = new GeoNode.BOPHeatmapModel({
+                            params: params
                         });
                     }
                 }

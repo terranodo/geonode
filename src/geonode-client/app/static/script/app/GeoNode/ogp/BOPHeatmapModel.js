@@ -23,9 +23,14 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
       var self = this;
       Ext.apply(this, config);
 
-      if (config && config.params && config.params["q.text"] && config.respHeatmap) {
-          this.map = GeoExt.MapPanel.guess().map;
-          this.drawHeatmapOpenLayers(config.params["q.text"], config.respHeatmap);
+      this.map = GeoExt.MapPanel.guess().map;
+      this.map.events.on({
+          'moveend': this.updateHeatMapLayers,
+          scope: this
+      });
+
+      if (config && config.params && config.params["q.text"]) {
+          this.requestHeatmap(config.params);
       }
 
       Ext.QuickTips.init();
@@ -37,58 +42,66 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
           showDelay: 0,
           width: 80
         });
-
     },
-
-    setQueryParameters: function(){
-
-        var extent = this.createExtent(this.params["q.geo"]);
-        var center = extent.getCenterLonLat();
-
-        // if (extent){
-        //   //extent = extent.transform(new OpenLayers.Projection('EPSG:900913'), new OpenLayers.Projection('EPSG:4326'));
-        //   var bbox = {
-        //     minX: extent.left,
-        //     maxX: extent.right,
-        //     minY: extent.bottom,
-        //     maxY: extent.top
-        //   };
-        //   GeoNode.solr.center = {
-        //     centerX: center.lat,
-        //     centerY: center.lon
-        //   }
-        //   var params = GeoNode.solr.getOgpSpatialQueryParams(bbox);
-        //   GeoNode.queryTerms.intx = params.intx;
-        //   GeoNode.queryTerms.bf = params.bf;
-        //   heatmapParams['facet.heatmap.geom'] = params['facet.heatmap.geom'];
-        // }
-    },
-
 
     /**
-     * Converts the provided bounding box parameter from string to `OpenLayers.Bounds`
-     * object (e.g. "[-90,-180 TO 90,180]" -> [-90,-180,90,180])
-     * @param {String} requested bbox as string
-     * @return {OpenLayers.Bounds}
+     * Request heatmap with the given parameters
+     * @param {Object} params request parameters due to API
      */
-    createExtent: function(bboxString){
-        var bounds;
-        bounds = (bboxString.replace(/[^\d .,-]/g, '').replace(/\s+/g, ',')).split(',');
+    requestHeatmap: function(params) {
+      Ext.Ajax.request({
+          url: GeoNode.bopTweetSearchBackend,
+          method: 'GET',
+          params: params,
+          waitMsg: "{% trans 'Searching for tweets...' %}",
+          success: function(response) {
+              if (response && response.responseText){
+                  var respHeatmap = Ext.util.JSON.decode(response.responseText);
+                  if (respHeatmap["a.matchDocs"] > 0) {
+                      this.drawHeatmapOpenLayers(params, respHeatmap);
+                      var searchWin = Ext.getCmp('ge_searchWindow');
+                      if (searchWin){
+                          Ext.getCmp('ge_searchWindow').hide();
+                      }
+                  } else {
+                      var msg = "The configured heatmap contains no facets";
+                      Ext.Msg.show({
+                          title: "{% trans 'Warning' %}",
+                          msg: msg,
+                          minWidth: 200,
+                          modal: true,
+                          icon: Ext.Msg.WARN,
+                          buttons: Ext.Msg.OK
+                      });
+                  }
+              }
+          },
+          failure: function(response, form) {
+              var msg = Ext.util.JSON.decode(response.responseText).message;
 
-        return new OpenLayers.Bounds(
-            parseFloat(bounds[0]),
-            parseFloat(bounds[1]),
-            parseFloat(bounds[2]),
-            parseFloat(bounds[3])
-        );
+              var error_message = '<ul>';
+              error_message += '<li>' + msg + '</li>';
+              error_message += '</ul>'
+
+              Ext.Msg.show({
+                  title: "{% trans 'Error' %}",
+                  msg: error_message,
+                  minWidth: 200,
+                  modal: true,
+                  icon: Ext.Msg.ERROR,
+                  buttons: Ext.Msg.OK
+              });
+          },
+          scope: this
+      });
     },
 
     /**
      * Creates a new `Heatmap.Layer` instance with responsed heatmap from API
-     * @param {String} heatMapLayerName layer name in layertree (equal to keyword)
+     * @param {Object} heatMapParams original request parameters from form
      * @param {Object} respHeatmap heatmap parameters as JSON response from API
      */
-    drawHeatmapOpenLayers: function(heatMapLayerName, respHeatmap){
+    drawHeatmapOpenLayers: function(heatMapParams, respHeatmap){
 
         // don't do anything, if heatmap parameters are empty
         var heatmap = respHeatmap["a.hm"];
@@ -96,11 +109,19 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
             return;
         };
 
-        this.heatmapLayer = new Heatmap.Layer(heatMapLayerName);
+        var heatMapLayerName = heatMapParams["q.text"];
+
+        var heatmapLayer = new Heatmap.Layer(heatMapLayerName);
+
+        this.heatmapLayer = heatmapLayer;
 
         // set additional abstract property to be used as tooltip on
         // mouseover event on layer record in layertree
         this.heatmapLayer["abstract"] = heatMapLayerName;
+
+        // store the request parameters (q.time, q.bbox, q.text, q.user,
+        // d.docs.limit and d.docs.sort) to reuse it on heatmap update
+        this.heatmapLayer["requestParams"] = heatMapParams;
 
         this.heatmapLayer.points = [];
 
@@ -136,7 +157,9 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
                     var mercator = this.WGS84ToMercator(lon, lat);
                     var scaledValue = this.rescaleHeatmapValue(hmVal, minMaxValue);
                     var radiusFactor = this.getRadiusFactor();
-                    this.heatmapLayer.addSource(new Heatmap.Source(mercator, radius*radiusFactor*this.radiusAdjust, scaledValue));
+                    this.heatmapLayer.addSource(
+                      new Heatmap.Source(mercator, radius*radiusFactor*this.radiusAdjust, scaledValue)
+                    );
                 }
               }
               catch (error){
@@ -177,6 +200,24 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
         }
     },
 
+    /**
+     * Update heatmap layer after map extent was change (on zoom or pan event)
+     */
+    updateHeatMapLayers: function(){
+        var heatmapLayers = this.map.getLayersByClass('Heatmap.Layer');
+        Ext.each(heatmapLayers, function(hmLayer){
+            // update spatial bbox with the current map extent
+            hmLayer.requestParams["q.geo"] = this.updateBbox();
+            this.requestHeatmap(hmLayer.requestParams);
+        },this);
+    },
+
+    /**
+     * Create new tree node for the added heatmap layer. This will be placed
+     * in "BOP Heatmap Layers" folder of the layer tree.
+     * @param {String} folderName folder name
+     * @param {Heatmap.Layer} layer layer to be added
+     */
     createLayerTreeNode: function(folderName, layer){
         var ltPanel = Ext.getCmp('treecontent');
         var rootNode = this.layertree.tree.getRootNode();
@@ -195,16 +236,6 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
                 leaf: true
             });
         }
-    },
-
-    getNextAvaliableZIndex: function(){
-        var zIdx = 0;
-        Ext.each(this.map.layers, function(l){
-            if (l.getZIndex() > zIdx) {
-              zIdx = l.getZIndex();
-            }
-        })
-        return zIdx;
     },
 
     getRadiusFactor: function(){
@@ -295,5 +326,141 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
           lon = -179.99;
         }
         return OpenLayers.Layer.SphericalMercator.forwardMercator(lon, lat);
+    },
+
+    /**
+     * Compute new bounding box from the current map extent and return it as
+     * string that can be read by API (e.g. `[-90,-180 TO 90,180]`).
+     * Additionaly a normalization of extent will be proceed to fit it to maximal
+     * bounds (s. {@normalize} method)
+     */
+    updateBbox: function() {
+        var wgs84extent = this.map.getExtent()
+            .transform(this.map.getProjection(), 'EPSG:4326');
+        var normWgs84extent = this.normalize(wgs84extent).toString().split(',');
+        return "[" + normWgs84extent[1] + "," + normWgs84extent[0] + " TO " + normWgs84extent[3] + "," + normWgs84extent[2] + "]"
+    },
+
+    /**
+     * Clamps given number `num` to be inside the allowed range from `min`
+     * to `max`.
+     * Will also work as expected if `max` and `min` are accidently swapped.
+     *
+     * @param {number} num The number to clamp.
+     * @param {number} min The minimum allowed number.
+     * @param {number} max The maximim allowed number.
+     * @return {number} The clamped number.
+     */
+    clamp: function(num, min, max) {
+        if (max < min) {
+            var tmp = min;
+            min = max;
+            max = tmp;
+        }
+        return Math.min(Math.max(min, num), max);
+    },
+
+    /**
+     * Determines whether passed longitude is outside of the range `-180`
+     * and `+180`.
+     *
+     * @param {number} lon The longitude to check.
+     * @return {boolean} Whether the longitude is outside of the range
+     *  -180` and `+180`.
+     */
+    outsideLonRange: function(lon) {
+        return lon < -180 || lon > 180;
+    },
+
+    /**
+     * Determines whether passed latitude is outside of the range `-90` and
+     * `+90`.
+     * @param {number} lat The longitude to check.
+     * @return {boolean} Whether the latitude is outside of the range `-90`
+     *  and `+90`.
+     */
+    outsideLatRange: function(lat) {
+        return lat < -90 || lat > 90;
+    },
+
+    /**
+     * Clamps given longitude to be inside the allowed range from `-180` to
+     * `+180`.
+     * @param {number} lon The longitude to fit / clamp.
+     * @return {number} The fitted / clamped longitude.
+     */
+    clampLon: function(lon) {
+        return this.clamp(lon, -180, 180);
+    },
+
+    /**
+     * Clamps given latitude to be inside the allowed range from `-90` to
+     * `+90`.
+     * @param {number} lat The latitude to fit / clamp.
+     * @return {number} The fitted / clamped latitude.
+     */
+    clampLat: function(lat) {
+        return this.clamp(lat, -90, 90);
+    },
+
+    /**
+     * Normalizes an `EPSG:4326` extent which may stem from multiple worlds
+     * so that the returned extent always is within the bounds of the one
+     * true `EPSG:4326` world extent `[-180, -90, 180, 90]`.
+     *
+     * Examples:
+     *
+     *     // valid world in, returned as-is:
+     *     normalize([-180, -90, 180, 90])  // => [-180, -90, 180, 90]
+     *
+     *     // valid extent in world in, returned as-is:
+     *     normalize([-160, -70, 150, 70])  // => [-160, -70, 150, 70]
+     *
+     *     // shifted one degree westwards, returns one-true world:
+     *     normalize([-181, -90, 179, 90])  // => [-180, -90, 180, 90]
+     *
+     *     // shifted one degree eastwards, returns one-true world:
+     *     normalize([-179, -90, 181, 90])  // => [-180, -90, 180, 90]);
+     *
+     *     // shifted more than one world westwards, returns one-true world:
+     *     normalize([-720, -90, -360, 90]) // => [-180, -90, 180, 90]);
+     *
+     *     // shifted to the south, returns one-true world:
+     *     normalize([-180, -91, 180, 89])  // =>   [-180, -90, 180, 90]);
+     *
+     *     // multiple worlds, returns one-true world:
+     *     normalize([-360, -90, 180, 90])  // =>   [-180, -90, 180, 90]);
+     *
+     *     // multiple worlds, returns one-true world:
+     *     normalize([-360, -180, 180, 90]) // =>  [-180, -90, 180, 90]);
+     *
+     * @param {Array<number>} Extent to normalize: [minx, miny, maxx, maxy].
+     * @return {Array<number>} Normalized extent: [minx, miny, maxx, maxy].
+     */
+    normalize: function(extent) {
+        var minX = extent.left;
+        var minY = extent.bottom;
+        var maxX = extent.right;
+        var maxY = extent.top;
+        var width = Math.min(maxX - minX, 360);
+        var height = Math.min(maxY - minY, 180);
+
+        if (this.outsideLonRange(minX)) {
+            minX = this.clampLon(minX);
+            maxX = minX + width;
+        } else if (this.outsideLonRange(maxX)) {
+            maxX = this.clampLon(maxX);
+            minX = maxX - width;
+        }
+
+        if (this.outsideLatRange(minY)) {
+            minY = this.clampLat(minY);
+            maxY = minY + height;
+        } else if (this.outsideLatRange(maxY)) {
+            maxY = this.clampLat(maxY);
+            minY = maxY - height;
+        }
+
+        return [minX, minY, maxX, maxY];
     }
 });
