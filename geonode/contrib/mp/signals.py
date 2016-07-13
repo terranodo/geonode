@@ -14,7 +14,7 @@ def tileset_post_save(instance, sender, **kwargs):
         else:
             layer = Layer.objects.get(name=instance.name)     
                
-        tile_url = "/djmp/1/map/tiles/%s/EPSG3857/{z}/{x}/{y}.png" % instance.name
+        tile_url = "/djmp/%d/map/tiles/%s/EPSG3857/{z}/{x}/{y}.png" % (instance.id, instance.name)
         Link.objects.get_or_create(
             resource=layer.resourcebase_ptr,
             url=tile_url,
