@@ -15,9 +15,8 @@ def tileset_post_save(instance, sender, **kwargs):
             layer = Layer.objects.get(name=instance.name)     
                
         tile_url = "/djmp/%d/map/tiles/%s/EPSG3857/{z}/{x}/{y}.png" % (instance.id, instance.name)
-        Link.objects.get_or_create(
+        l, __ = Link.objects.get_or_create(
             resource=layer.resourcebase_ptr,
-            url=tile_url,
             defaults=dict(
                 extension='tiles',
                 name="Tiles",
@@ -25,5 +24,7 @@ def tileset_post_save(instance, sender, **kwargs):
                 link_type='image'
             )
         )
+        l.tile_url = tile_url
+        l.save()
     except:
         print sys.exc_info()[0]
