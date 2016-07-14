@@ -11,12 +11,18 @@ from .models import Tileset
 
 def tileset_post_save(instance, sender, **kwargs):
     try:
-        layer, created = Layer.objects.get_or_create( 
+        if instance.layer_uuid: # layer already exists
+            layer = Layer.objects.get(uuid=instance.layer_uuid)
+        else:
+            layer = Layer( 
             name=instance.name,
             bbox_x0 = instance.bbox_x0,
             bbox_x1 = instance.bbox_x1,
             bbox_y0 = instance.bbox_y0,
             bbox_y1 = instance.bbox_y1)
+            layer.save()
+            instance.layer_uuid = layer.uuid
+            instance.save()
         
         if USE_DISK_CACHE:
             tile_url = '/%s/%s/{z}/{x}/{y}.png' % (FILE_CACHE_DIRECTORY, instance.id)
