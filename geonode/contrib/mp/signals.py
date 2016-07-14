@@ -13,6 +13,10 @@ def tileset_post_save(instance, sender, **kwargs):
 
         if not existing_layer:
             layer = Layer(name=instance.name)
+            layer.bbox_x0 = instance.bbox_x0
+            layer.bbox_x1 = instance.bbox_x1
+            layer.bbox_y0 = instance.bbox_y0
+            layer.bbox_y1 = instance.bbox_y1
             layer.save()
         else:
             layer = Layer.objects.get(name=instance.name)     
