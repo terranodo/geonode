@@ -236,7 +236,7 @@ GEONODE_APPS = (
     # GeoServer Apps
     # Geoserver needs to come last because
     # it's signals may rely on other apps' signals.
-    #'geonode.geoserver',
+    'geonode.geoserver',
     'geonode.upload',
     'geonode.tasks'
 )
@@ -951,3 +951,5 @@ if 'geonode.geoserver' in INSTALLED_APPS:
     baselayers = MAP_BASELAYERS
     MAP_BASELAYERS = [LOCAL_GEOSERVER]
     MAP_BASELAYERS.extend(baselayers)
+
+USE_DJMP_FOR_ALL_LAYERS = True
