@@ -14,19 +14,14 @@
             attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
         });
 
-        var mapquest = L.tileLayer('http://otile4.mqcdn.com/tiles/1.0.0/osm/{z}/{x}/{y}.png', {
-            attribution: 'Tiles Courtesy of <a href="http://www.mapquest.com/">MapQuest</a> &mdash; Map data &copy; <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        });
-
         var base_maps = {
-            "MapQuest": mapquest,
             'OpenStreetMap': osm
         };
 
         var overlay_layer = {};
 
         var map = L.map('preview_map');
-        map.addLayer(mapquest);
+        map.addLayer(osm);
 
         {% if resource.bbox_string %}
             zoom_to_box(map, [{{ resource.bbox_string }}]);
