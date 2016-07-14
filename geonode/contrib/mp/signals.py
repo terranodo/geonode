@@ -28,14 +28,13 @@ def tileset_post_save(instance, sender, **kwargs):
 
         l, __ = Link.objects.get_or_create(
             resource=layer.resourcebase_ptr,
-            defaults=dict(
-                extension='tiles',
-                name="Tiles",
-                mime='image/png',
-                link_type='image'
-            )
+            extension='tiles',
+            name="Tiles",
+            mime='image/png',
+            link_type='image'
         )
-        l.tile_url = tile_url
+
+        l.url = tile_url
         l.save()
     except:
         print sys.exc_info()[0]
