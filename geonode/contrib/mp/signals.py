@@ -11,7 +11,7 @@ from .models import Tileset
 
 def tileset_post_save(instance, sender, **kwargs):
     try:
-        layer, created = Layer( 
+        layer, created = Layer.objects.get_or_create( 
             name=instance.name,
             bbox_x0 = instance.bbox_x0,
             bbox_x1 = instance.bbox_x1,
