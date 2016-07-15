@@ -15,11 +15,12 @@ def tileset_post_save(instance, sender, **kwargs):
             layer = Layer.objects.get(uuid=instance.layer_uuid)
         else:
             layer = Layer( 
-            name=instance.name,
-            bbox_x0 = instance.bbox_x0,
-            bbox_x1 = instance.bbox_x1,
-            bbox_y0 = instance.bbox_y0,
-            bbox_y1 = instance.bbox_y1)
+                name = instance.name,
+                title = instance.name,
+                bbox_x0 = instance.bbox_x0,
+                bbox_x1 = instance.bbox_x1,
+                bbox_y0 = instance.bbox_y0,
+                bbox_y1 = instance.bbox_y1)
             layer.save()
             instance.layer_uuid = layer.uuid
             instance.save()
@@ -40,6 +41,7 @@ def tileset_post_save(instance, sender, **kwargs):
         l.url = tile_url
         l.save()
     except:
+        # TODO: This is bad to just swallow this error!
         print sys.exc_info()[0]
 
 def layer_post_save(instance, sender, **kwargs):
