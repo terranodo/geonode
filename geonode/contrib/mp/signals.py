@@ -4,6 +4,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.urlresolvers import reverse
 from django.conf import settings
 import sys
+import uuid
 
 from .settings import USE_DISK_CACHE
 from djmp.settings import FILE_CACHE_DIRECTORY
@@ -14,17 +15,17 @@ def tileset_post_save(instance, sender, **kwargs):
         if instance.layer_uuid: # layer already exists
             layer = Layer.objects.get(uuid=instance.layer_uuid)
         else:
-            layer = Layer( 
+            layer_uuid = str(uuid.uuid1())
+            Tileset.objects.filter(pk=instance.pk).update(layer_uuid=layer_uuid)
+            layer = Layer.objects.create( 
                 name = instance.name,
                 title = instance.name,
                 bbox_x0 = instance.bbox_x0,
                 bbox_x1 = instance.bbox_x1,
                 bbox_y0 = instance.bbox_y0,
-                bbox_y1 = instance.bbox_y1)
-            layer.save()
-            instance.layer_uuid = layer.uuid
-            instance.save()
-        
+                bbox_y1 = instance.bbox_y1,
+                uuid = layer_uuid)
+
         if USE_DISK_CACHE:
             tile_url = '/%s/%s/{z}/{x}/{y}.png' % (FILE_CACHE_DIRECTORY, instance.id)
         else:
@@ -45,20 +46,23 @@ def tileset_post_save(instance, sender, **kwargs):
         print sys.exc_info()[0]
 
 def layer_post_save(instance, sender, **kwargs):
-    tileset, __ = Tileset.objects.get_or_create(
-        name = instance.title,
-        created_by = instance.owner.username,
-        source_type = 'wms',
-        server_url = settings.OGC_SERVER['default']['LOCATION'] + 'wms',
-        server_username = settings.OGC_SERVER['default']['USER'],
-        server_password = settings.OGC_SERVER['default']['PASSWORD'],
-        layer_name = instance.typename,
-        layer_zoom_stop = 12,
-        bbox_x0 = instance.bbox_x0,
-        bbox_x1 = instance.bbox_x1,
-        bbox_y0 = instance.bbox_y0,
-        bbox_y1 = instance.bbox_y1,
-        cache_type = 'file',
-        directory_layout = 'tms'
-        )
-    tileset.seed()
+    if not Tileset.objects.filter(layer_uuid=instance.uuid).exists():
+        tileset = Tileset.objects.create(
+            name = instance.title,
+            created_by = instance.owner.username,
+            layer_name = instance.typename,
+            bbox_x0 = instance.bbox_x0,
+            bbox_x1 = instance.bbox_x1,
+            bbox_y0 = instance.bbox_y0,
+            bbox_y1 = instance.bbox_y1,
+            source_type = 'wms',
+            server_url = settings.OGC_SERVER['default']['LOCATION'] + 'wms',
+            server_username = settings.OGC_SERVER['default']['USER'],
+            server_password = settings.OGC_SERVER['default']['PASSWORD'],
+            cache_type = 'file',
+            directory_layout = 'tms',
+            layer_zoom_stop = 12,
+            layer_uuid = instance.uuid
+            )
+
+        tileset.seed()
