@@ -10,40 +10,37 @@ from .settings import USE_DISK_CACHE
 from djmp.settings import FILE_CACHE_DIRECTORY
 from .models import Tileset
 
+
 def tileset_post_save(instance, sender, **kwargs):
-    try:
-        if instance.layer_uuid: # layer already exists
-            layer = Layer.objects.get(uuid=instance.layer_uuid)
-        else:
-            layer_uuid = str(uuid.uuid1())
-            Tileset.objects.filter(pk=instance.pk).update(layer_uuid=layer_uuid)
-            layer = Layer.objects.create( 
-                name = instance.name,
-                title = instance.name,
-                bbox_x0 = instance.bbox_x0,
-                bbox_x1 = instance.bbox_x1,
-                bbox_y0 = instance.bbox_y0,
-                bbox_y1 = instance.bbox_y1,
-                uuid = layer_uuid)
+    if instance.layer_uuid: # layer already exists
+        layer = Layer.objects.get(uuid=instance.layer_uuid)
+    else:
+        layer_uuid = str(uuid.uuid1())
+        Tileset.objects.filter(pk=instance.pk).update(layer_uuid=layer_uuid)
+        layer = Layer.objects.create( 
+            name = instance.name,
+            title = instance.name,
+            bbox_x0 = instance.bbox_x0,
+            bbox_x1 = instance.bbox_x1,
+            bbox_y0 = instance.bbox_y0,
+            bbox_y1 = instance.bbox_y1,
+            uuid = layer_uuid)
 
-        if USE_DISK_CACHE:
-            tile_url = '/%s/%s/{z}/{x}/{y}.png' % (FILE_CACHE_DIRECTORY, instance.id)
-        else:
-            tile_url = "/djmp/%d/map/tiles/%s/EPSG3857/{z}/{x}/{y}.png" % (instance.id, instance.name)
+    if USE_DISK_CACHE:
+        tile_url = '%s%s/%s/{z}/{x}/{y}.png' % (settings.SITEURL, FILE_CACHE_DIRECTORY, instance.id)
+    else:
+        tile_url = "%sdjmp/%d/map/tiles/%s/EPSG3857/{z}/{x}/{y}.png" % (settings.SITEURL, instance.id, instance.name)
 
-        l, __ = Link.objects.get_or_create(
-            resource=layer.resourcebase_ptr,
-            extension='tiles',
-            name="Tiles",
-            mime='image/png',
-            link_type='image'
-        )
+    l, __ = Link.objects.get_or_create(
+        resource=layer.resourcebase_ptr,
+        extension='tiles',
+        name="Tiles",
+        mime='image/png',
+        link_type='image'
+    )
+    l.url = tile_url
+    l.save()
 
-        l.url = tile_url
-        l.save()
-    except:
-        # TODO: This is bad to just swallow this error!
-        print sys.exc_info()[0]
 
 def layer_post_save(instance, sender, **kwargs):
     if not Tileset.objects.filter(layer_uuid=instance.uuid).exists():
