@@ -7,7 +7,7 @@ import sys
 import uuid
 
 from .settings import USE_DISK_CACHE
-from djmp.settings import FILE_CACHE_DIRECTORY
+from djmp.settings import TILESET_CACHE_URL
 from .models import Tileset
 
 
@@ -27,7 +27,7 @@ def tileset_post_save(instance, sender, **kwargs):
             uuid = layer_uuid)
 
     if USE_DISK_CACHE:
-        tile_url = '%s%s/%s/{z}/{x}/{y}.png' % (settings.SITEURL, FILE_CACHE_DIRECTORY, instance.id)
+        tile_url = '%s%s/%s/{z}/{x}/{y}.png' % (settings.SITEURL, TILESET_CACHE_URL, instance.id)
     else:
         tile_url = "%sdjmp/%d/map/tiles/%s/EPSG3857/{z}/{x}/{y}.png" % (settings.SITEURL, instance.id, instance.name)
 
