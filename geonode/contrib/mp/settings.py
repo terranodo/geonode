@@ -6,4 +6,4 @@ USE_DISK_CACHE = False
 # create mapproxy cache for all geonode layers
 USE_DJMP_FOR_GEONODE_LAYERS = True
 
-DJMP_AUTHORIZATION_CLASS = 'geonode.contrib.mp.authorization.GeoNodeDJMPAuthorization'
+DJMP_AUTHORIZATION_CLASS = 'geonode.contrib.mp.authorisation.GeoNodeDJMPAuthorization'
