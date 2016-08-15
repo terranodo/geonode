@@ -62,7 +62,7 @@ for dirpath, dirnames, filenames in os.walk(geonode_dir):
         data_files.append([dirpath, [os.path.join(dirpath, f) for f in filenames]])
 
 
-setup(name='GeoNode',
+setup(name='geonode-hypermap',
       version=__import__('geonode').get_version(),
       description="Application for serving and sharing geospatial data",
       long_description=open('README').read(),
@@ -71,7 +71,7 @@ setup(name='GeoNode',
       keywords='',
       author='GeoNode Developers',
       author_email='dev@geonode.org',
-      url='http://geonode.org',
+      url='http://github.com/terranodo/geonode.git@registry',
       license='GPL',
       packages=packages,
       data_files=data_files,
