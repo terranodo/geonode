@@ -953,4 +953,4 @@ if 'geonode.geoserver' in INSTALLED_APPS:
     MAP_BASELAYERS = [LOCAL_GEOSERVER]
     MAP_BASELAYERS.extend(baselayers)
 
-USE_DJMP_FOR_ALL_LAYERS = True
+from geonode.contrib.mp.settings import *

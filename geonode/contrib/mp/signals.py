@@ -57,7 +57,8 @@ def layer_post_save(instance, sender, **kwargs):
             server_password = settings.OGC_SERVER['default']['PASSWORD'],
             cache_type = 'file',
             directory_layout = 'tms',
-            layer_zoom_stop = 12,
+            layer_zoom_stop = settings.CACHE_ZOOM_STOP,
+            layer_zoom_start = settings.CACHE_ZOOM_START,
             layer_uuid = instance.uuid
             )
 
