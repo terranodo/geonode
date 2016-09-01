@@ -9,4 +9,4 @@ USE_DJMP_FOR_GEONODE_LAYERS = True
 DJMP_AUTHORIZATION_CLASS = 'geonode.contrib.mp.authorisation.GeoNodeDJMPAuthorization'
 
 CACHE_ZOOM_START = 0
-CACHE_ZOOM_START = 12
+CACHE_ZOOM_STOP = 12
