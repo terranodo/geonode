@@ -10,3 +10,5 @@ DJMP_AUTHORIZATION_CLASS = 'geonode.contrib.mp.authorisation.GeoNodeDJMPAuthoriz
 
 CACHE_ZOOM_START = 0
 CACHE_ZOOM_STOP = 12
+
+CACHE_ON_LAYER_LOAD = False

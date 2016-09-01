@@ -62,4 +62,5 @@ def layer_post_save(instance, sender, **kwargs):
             layer_uuid = instance.uuid
             )
 
-        tileset.seed()
+        if settings.CACHE_ON_LAYER_LOAD:
+            tileset.seed()
