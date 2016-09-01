@@ -256,6 +256,7 @@ GEONODE_APPS = (
     'geonode.geoserver',
     'geonode.upload',
     'geonode.tasks',
+    'geonode.contrib.mp',
 
 )
 
@@ -328,6 +329,7 @@ INSTALLED_APPS = (
     'tastypie',
     'polymorphic',
     'guardian',
+    'djmp',
 
 ) + GEONODE_APPS
 
@@ -973,6 +975,8 @@ if 'geonode.geoserver' in INSTALLED_APPS:
     baselayers = MAP_BASELAYERS
     MAP_BASELAYERS = [LOCAL_GEOSERVER]
     MAP_BASELAYERS.extend(baselayers)
+
+from geonode.contrib.mp.settings import *
 
 # Load more settings from a file called local_settings.py if it exists
 try:
