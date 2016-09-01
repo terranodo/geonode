@@ -12,6 +12,7 @@
     document.addEventListener("DOMContentLoaded", function (event) {
         var osm = L.tileLayer('http://{s}.tile.osm.org/{z}/{x}/{y}.png', {
             attribution: '&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 18,
         });
 
         var base_maps = {
@@ -20,7 +21,7 @@
 
         var overlay_layer = {};
 
-        var map = L.map('preview_map');
+        var map = L.map('preview_map', {maxZoom: 30});
         map.addLayer(osm);
 
         {% if resource.bbox_string %}
