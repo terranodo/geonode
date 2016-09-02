@@ -31,6 +31,7 @@ from django.shortcuts import render_to_response, get_object_or_404
 from django.conf import settings
 from django.template import RequestContext
 from django.utils.translation import ugettext as _
+from django.db.models.expressions import RawSQL
 try:
     # Django >= 1.7
     import json
@@ -53,7 +54,7 @@ from geonode.utils import layer_from_viewer_config
 from geonode.maps.forms import MapForm
 from geonode.security.views import _perms_info_json
 from geonode.base.forms import CategoryForm
-from geonode.base.models import TopicCategory
+from geonode.base.models import TopicCategory, Link
 from geonode.tasks.deletion import delete_map
 
 from geonode.documents.models import get_related_documents
@@ -120,8 +121,10 @@ def map_detail(request, mapid, snapshot=None, template='maps/map_detail.html'):
         config = snapshot_config(snapshot, map_obj, request.user)
 
     config = json.dumps(config)
-    layers = MapLayer.objects.filter(map=map_obj.id)
-
+    layers = MapLayer.objects.exclude(group='background').filter(map=map_obj.id)
+    for layer in layers:
+        layer.tms_url = Link.objects.get(resource__layer__typename=layer.name, name='Tiles').url
+    
     context_dict = {
         'config': config,
         'resource': map_obj,
