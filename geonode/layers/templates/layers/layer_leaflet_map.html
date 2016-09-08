@@ -26,7 +26,7 @@
 
         var overlay_layer = {};
 
-        var map = L.map('preview_map');
+        var map = L.map('preview_map', {maxZoom: 30});
         map.addLayer(OpenMapSurfer_Roads);
 
         {% if resource.bbox_string %}
@@ -36,21 +36,24 @@
         {% if resource.get_tiles_url %}
             tile_layer = L.tileLayer("{{ resource.get_tiles_url|safe }}",
                     {
-                        'opacity': 0.8
+                        'opacity': 0.8,
+                        'maxZoom': 25
                     });
         {%  elif resource.ptype == "gxp_wmscsource"  %}
             tile_layer = L.tileLayer.wms('{{ resource.ows_url|safe }}', {
                 layers: '{{ resource.typename }}',
                 format: 'image/png',
                 transparent: true,
-                'opacity': 0.8
+                'opacity': 0.8,
+                'maxZoom': 25
             });
         {%  elif resource.ptype == "gxp_arcrestsource" %}
             tile_layer = L.esri.dynamicMapLayer('{{ resource.ows_url|safe }}', {
                 layers: '{{ resource.typename }}',
                 format: 'png',
                 transparent: true,
-                'opacity': 0.8
+                'opacity': 0.8,
+                'maxZoom': 25
             });
 
         {% endif %}
