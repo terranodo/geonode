@@ -253,7 +253,6 @@ GEONODE_APPS = (
     # GeoServer Apps
     # Geoserver needs to come last because
     # it's signals may rely on other apps' signals.
-    'geonode.geoserver',
     'geonode.upload',
     'geonode.tasks',
     'geonode.contrib.mp',
