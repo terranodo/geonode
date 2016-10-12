@@ -20,9 +20,9 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
     remoteTooltip: 'UT: Remote Data',
     invalidQueryText: 'Invalid Query',
     searchTermRequired: 'You need to specify a search term',
-    originatorSearchLabelText: 'Originator',
+    originatorSearchLabelText: 'Source',
     dataTypeSearchLableText: 'UT: Data Type',
-    originatorText: 'Originator',
+    originatorText: 'Source',
 
     searchOnLoad: false,
     linkableTitle: true,
@@ -43,28 +43,30 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
         this.searchStore = new Ext.data.JsonStore({
             url: this.searchURL,
             root: 'response.docs',
-            idProperty: 'LayerId',
+            idProperty: 'id',
             remoteSort: true,
             totalProperty: 'response.numFound',
             fields: [
-                {name: 'LayerTitle', type: 'string'},
-                {name: 'LayerId', type: 'string'},
-                {name: 'MinX', type: 'string'},
-                {name: 'MinY', type: 'string'},
-                {name: 'MaxX', type: 'string'},
-                {name: 'MaxY', type: 'string'},
-                {name: 'Originator', type: 'string'},
-                {name: 'Location', type: 'string'},
-                {name: 'LayerName', type: 'string'},
-                {name: 'LayerDate', type: 'string'},
-                {name: 'Availability', type: 'string'},
-                {name: 'Abstract', type: 'string'},
+                {name: 'id', type: 'string'},
+                {name: 'name', type: 'string'},
+                {name: 'title', type: 'string'},
+                {name: 'abstract', type: 'string'},
+                {name: 'min_x', type: 'string'},
+                {name: 'min_y', type: 'string'},
+                {name: 'max_x', type: 'string'},
+                {name: 'max_y', type: 'string'},
+                {name: 'layer_originator', type: 'string'},
+                {name: 'is_public', type: 'string'},
+                {name: 'url', type: 'string'},
+                {name: 'service_type', type: 'string'},
                 {name: 'bbox', type: 'string'},
-                {name: 'LayerUrl', type: 'string'},
-                {name: 'ServiceType', type: 'string'},
-                {name: 'LayerUsername', type: 'string'},
-                {name: 'Is_Public', type: 'string'},
-                {name: 'LayerDateType', type: 'string'}
+                {name: 'location', type: 'string'},
+                {name: 'layer_date', type: 'string'},
+                {name: 'layer_datetype', type: 'string'},
+                // not used?
+                {name: 'Availability', type: 'string'},
+                {name: 'LayerUsername', type: 'string'}
+
             ]
         });
         this.searchStore.on('load', function() {
@@ -88,6 +90,12 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
                     };
                     clearTimeout(timeout);
                 });
+            });
+
+            // use jquery to remove tooltip on mouseleave
+            $('.x-grid3-row').mouseleave(function(){
+                $('.x-tip').hide();
+                $('.x-shadow').hide();
             });
         }, this);
 
@@ -195,19 +203,19 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
         /* called when main search query changes */
         GeoNode.queryTerms.q = this.queryInput.getValue();
 
-        // Remove any Originator filter if there
+        // Remove any layer_originator filter if there
         for(var i=0;i<GeoNode.queryTerms.fq.length;i++){
-            if(GeoNode.queryTerms.fq[i].indexOf('Originator') > -1){
+            if(GeoNode.queryTerms.fq[i].indexOf('layer_originator') > -1){
                 GeoNode.queryTerms.fq.splice(i, 1);
             }
         };
         if (this.originatorInput.getValue() !== ''){
-            GeoNode.queryTerms.fq.push('Originator:*' + this.originatorInput.getValue() + '*');
+            GeoNode.queryTerms.fq.push('layer_originator:*' + this.originatorInput.getValue() + '*');
         }
 
         // Remove any DataType filter if there
         for(var i=0;i<GeoNode.queryTerms.fq.length;i++){
-            if(GeoNode.queryTerms.fq[i].indexOf('ServiceType') > -1){
+            if(GeoNode.queryTerms.fq[i].indexOf('service_type') > -1){
                 GeoNode.queryTerms.fq.splice(i, 1);
             }
         };
@@ -218,13 +226,13 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
 
         // Remove any date filter if there
         for(var i=0;i<GeoNode.queryTerms.fq.length;i++){
-            if(GeoNode.queryTerms.fq[i].indexOf('LayerDate') > -1){
+            if(GeoNode.queryTerms.fq[i].indexOf('layer_date') > -1){
                 GeoNode.queryTerms.fq.splice(i, 1);
             }
         };
         var dates = this.dateInput.getDateValues();
-        if(dates){
-            GeoNode.queryTerms.fq.push("LayerDate:" + this.dateInput.getDateValues());
+        if(dates != '[* TO *]'){
+            GeoNode.queryTerms.fq.push("layer_date:" + this.dateInput.getDateValues());
         };
 
         if (this.queryInput.getValue() === ''){
@@ -274,7 +282,7 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
         var sm = new Ext.grid.RowSelectionModel({
             listeners:{
                 rowselect: function(sm, rowIndex, record){
-                    if(record.get('Is_Public')){
+                    if(record.get('is_public')){
                         self.heatmap.bbox_widget.viewer.fireEvent('showLayer',
                         self.getlayerTypename(record), self.getLayerID(record));
                     }
@@ -316,25 +324,28 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
         var columns = [
             {
                 header: this.titleHeaderText,
-                dataIndex: 'LayerTitle',
+                dataIndex: 'title',
                 id: 'title',
                 sortable: true,
                 width: 200,
                 sortBy: 'LayerTitle',
                 renderer: function(value, metadata, record, rowIndex, colIndex, store){
-                    var the_abstract = app.layerTree.replaceURLWithHTMLLinks(record.get('Abstract'));
-                    metadata.attr = 
-                        'ext:qtip="' + record.get('Originator') + 
-                        '<br/><strong>Abstract</strong>: ' + 
-                        the_abstract.substring(0, 250) + 
-                        '<br/><strong>Date</strong>: ' + record.get('LayerDateType') + '"';
-                    return record.get('Is_Public') ?  value : '<span class="unviewable-layer"></span>' + '  ' + value;
+
+                    var the_abstract = app.layerTree.replaceURLWithHTMLLinks(record.get('abstract'));
+                    metadata.attr =
+                        'ext:qtip="<strong>Title: ' + record.get('title') +
+                        '</strong><br/><strong>Source: ' + record.get('layer_originator') +
+                        '</strong><br/><strong>Abstract</strong>: ' +
+                        the_abstract.substring(0, 250) +
+                        '<br/><strong>Date</strong>: ' + record.get('layer_datetype') + '"';
+                    return $.parseJSON(record.get('is_public')) ?  value : '<span class="unviewable-layer"></span>' + '  ' + value;
+
                 }
             },
             {
                 header: this.originatorText,
-                dataIndex: 'Originator',
-                id: 'originator',
+                dataIndex: 'layer_originator',
+                id: 'layer_originator',
                 width: 100,
                 sortable: true
             },
@@ -343,11 +354,18 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
                 id: 'date',
                 width: 50,
                 sortable: true,
-                dataIndex: 'LayerDate',
-                sortBy: 'LayerDate',
+                dataIndex: 'layer_date',
+                sortBy: 'layer_date',
                 renderer: function(value, metaData, record, rowIndex, colIndex, store){
-                    var date = new Date(record.get('LayerDate'));
-                    return date.getFullYear();
+                    var solr_date_array = record.get('layer_date').split('-');
+                    if(solr_date_array.length == 1){
+                      return 'None';
+                    }
+                    if (solr_date_array[0] == ''){
+                      return '-' + parseInt(solr_date_array[1], 10);
+                    } else {
+                      return parseInt(solr_date_array[0], 10);
+                    };
                 }
             }
         ];
@@ -364,7 +382,7 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
                         emptyText: this.searchLabelText,
                         name: 'search',
                         allowBlank: true,
-                        width: 100,
+                        width: 90,
                         height: 25,
                         cls: 'search-bar'
                      });
@@ -378,16 +396,20 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
                         emptyText: this.originatorSearchLabelText,
                         name: 'search_originator',
                         allowBlank: true,
-                        width: 100,
+                        width: 90,
                         height: 25,
                         cls: 'search-bar'
         });
-
+        this.originatorInput.on('specialkey', function(field, e) {
+            if (e.getKey() == e.ENTER) {
+                this.updateQuery();
+            }
+        }, this);
 
         this.dataTypeInput = new Ext.form.ComboBox({
             id: 'dataTypes',
             mode: 'local',
-            width: 130,
+            width: 110,
             height: 25,
             cls: 'data-type layer-selection',
             store: new Ext.data.ArrayStore({
@@ -397,11 +419,11 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
                     'Label'
                 ],
                 data: [['', 'All Layers'],
-                    ['ServiceType:WM', 'WorldMap Layers'],
-                    ['ServiceType:OGC_WMTS', 'WMTS'],
-                    ['ServiceType:OGC_WMS', 'WMS'],
-                    ['ServiceType:ESRI_ImageServer', 'ESRI Image'],
-                    ['ServiceType:ESRI_MapServer', 'ESRI Map']
+                    ['service_type:"Hypermap:WorldMap"', 'WorldMap Layers'],
+                    ['service_type:"OGC:WMTS"', 'WMTS'],
+                    ['service_type:"OGC:WMS"', 'WMS'],
+                    ['service_type:"ESRI:ArcGIS:ImageServer"', 'ESRI Image'],
+                    ['service_type:"ESRI:ArcGIS:MapServer"', 'ESRI Map']
                 ]
             }),
             valueField: 'value',
@@ -409,14 +431,13 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
             triggerAction: 'all',
             editable: false,
             forceSelection: true,
-            value: '',
-            listeners:{
-                change: function(scope, checked){
-                    self.updateQuery();
-                }
-            }
+            value: ''
         });
-
+        this.dataTypeInput.on('specialkey', function(field, e) {
+            if (e.getKey() == e.ENTER) {
+                this.updateQuery();
+            }
+        }, this);
 
         var dateStartTextField = new Ext.form.TextField({
             name: 'startDate',
@@ -440,6 +461,7 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
         var dateEndTextField = new Ext.form.TextField({
             name: 'endDate',
             width: 160,
+            height: 25,
             listeners: {
                 change: function(scope, newValue, oldValue){
                     self.dateInput.valuesFromInput(1, newValue);
@@ -483,6 +505,15 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
         });
         searchButton.on('click', this.updateQuery, this);
 
+        var clearSearchLink = new Ext.Button({
+            text: "Reset",
+            iconCls: 'not-prominent-btn',
+            cls: 'search-bar clear-search-button',
+            listeners: {
+                click: function(){self.clearSearch()}
+            }
+        });
+
         var searchForm = new Ext.Panel({
              frame: false,
              border: false,
@@ -503,7 +534,8 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
                     this.queryInput,
                     this.originatorInput,
                     this.dataTypeInput, //dropdown
-                    searchButton
+                    searchButton,
+                    clearSearchLink
                 ],
                 colspan: 4
             },{
@@ -564,10 +596,10 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
 
     getLayerBounds: function(element){
         var bbox = {};
-        bbox.south = element.data.MinY
-        bbox.north = element.data.MaxY
-        bbox.west = element.data.MinX
-        bbox.east = element.data.MaxX
+        bbox.south = element.data.min_y
+        bbox.north = element.data.max_y
+        bbox.west = element.data.min_x
+        bbox.east = element.data.max_x
         return bbox
     },
 
@@ -576,7 +608,8 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
     },
 
     showPreviewLayer: function(record){
-        if(record.get('Is_Public')){
+
+        if($.parseJSON(record.get('is_public'))){
             var typename = this.getlayerTypename(record);
             this.heatmap.bbox_widget.viewer.fireEvent("showPreviewLayer", typename, this.getLayerID(record));
         }
@@ -587,10 +620,20 @@ GeoNode.SearchTable = Ext.extend(Ext.util.Observable, {
     },
 
     getlayerTypename: function(record){
-        return record.get('LayerName');
+        return record.get('name');
     },
 
     getLayerID: function(record){
-        return record.get('LayerId');
+        return record.get('id');
+    },
+
+    clearSearch: function(){
+        this.originatorInput.setValue('');
+        this.dataTypeInput.setValue('');
+        this.dateInput.setValue(0, this.dateInput.values[0]);
+        this.dateInput.setValue(1, this.dateInput.values[1]);
+        this.queryInput.setValue('');
+        delete this.table.store.sortInfo;
+        this.updateQuery();
     }
 });

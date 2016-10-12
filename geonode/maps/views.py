@@ -31,6 +31,7 @@ import logging
 from geonode.flexidates import FlexiDateFormField
 import taggit
 from geonode.maps.utils import forward_mercator
+from geonode.maps.utils import get_db_store_name
 from geonode.maps.owslib_csw import CswRecord
 from django.utils.html import escape, strip_tags
 from django.forms.models import inlineformset_factory
@@ -932,7 +933,7 @@ def layer_metadata(request, layername):
 
         topic_category = layer.topic_category
         layerAttSet = inlineformset_factory(Layer, LayerAttribute, extra=0, form=LayerAttributeForm, )
-        show_gazetteer_form = request.user.is_superuser and layer.store == settings.DB_DATASTORE_NAME
+        show_gazetteer_form = settings.USE_GAZETTEER and layer.store == get_db_store_name(request.user)
 
         fieldTypes = {}
         attributeOptions = layer.attribute_set.filter(attribute_type__in=['xsd:dateTime','xsd:date','xsd:int','xsd:string','xsd:bigint', 'xsd:double'])
@@ -982,9 +983,8 @@ def layer_metadata(request, layername):
             if "tab" in request.POST:
                 tab = request.POST["tab"]
 
-
-
-            if layer_form.is_valid() and category_form.is_valid() and (not request.user.is_superuser or gazetteer_form.is_valid()):
+            if layer_form.is_valid() and category_form.is_valid() and (
+                    not settings.USE_GAZETTEER or gazetteer_form.is_valid()):
 
                 new_category = LayerCategory.objects.get(id=category_form.cleaned_data['category_choice_field'])
 
@@ -995,7 +995,7 @@ def layer_metadata(request, layername):
                         la.searchable = form["searchable"]
                         la.visible = form["visible"]
                         la.display_order = form["display_order"]
-                        if (request.user.is_superuser and gazetteer_form.is_valid()):
+                        if settings.USE_GAZETTEER and gazetteer_form.is_valid():
                             la.in_gazetteer = form["in_gazetteer"]
                             la.is_gaz_start_date = (la == gazetteer_form.cleaned_data["startDate"])
                             la.is_gaz_end_date = (la == gazetteer_form.cleaned_data["endDate"])
@@ -1020,7 +1020,7 @@ def layer_metadata(request, layername):
                 the_layer.keywords.clear()
                 the_layer.keywords.add(*new_keywords)
 
-                if request.user.is_superuser and gazetteer_form.is_valid():
+                if settings.USE_GAZETTEER and gazetteer_form.is_valid():
                     the_layer.in_gazetteer = "gazetteer_include" in request.POST
                     if the_layer.in_gazetteer:
                         the_layer.gazetteer_project = gazetteer_form.cleaned_data["project"]
@@ -1163,8 +1163,13 @@ def layer_detail(request, layername):
             RequestContext(request, {'error_message':
                 _("You are not permitted to view this layer")})), status=401)
 
-    metadata = layer.metadata_csw()
-
+    print '-' * 40
+    print '\nlayer.typename', layer.typename
+    print 'settings.GEOSERVER_BASE_URL', settings.GEOSERVER_BASE_URL
+    print 'layer.default_style.name', layer.default_style.name
+    print 'layer.title', layer.title
+    print 'layer.attribute_config()', layer.attribute_config(), '\n'
+    print '-' * 40
     maplayer = MapLayer(name = layer.typename, styles=[layer.default_style.name], source_params = '{"ptype": "gxp_gnsource"}', ows_url = settings.GEOSERVER_BASE_URL + "wms",  layer_params= '{"tiled":true, "title":" '+ layer.title + '", ' + json.dumps(layer.attribute_config()) + '}')
 
     # center/zoom don't matter; the viewer will center on the layer bounds
@@ -1175,7 +1180,6 @@ def layer_detail(request, layername):
 
     return render_to_response('maps/layer.html', RequestContext(request, {
         "layer": layer,
-        "metadata": metadata,
         "layerstats": layerstats,
         "viewer": json.dumps(map_obj.viewer_json(request.user, * (DEFAULT_BASE_LAYERS + [maplayer]))),
         "permissions_json": _perms_info_email_json(layer, LAYER_LEV_NAMES),
@@ -1666,7 +1670,7 @@ def metadata_search(request):
 
     result = _metadata_search(query, start, limit, sortby, sortorder, **advanced)
 
-    # XXX slowdown here to dig out result permissions
+    # slowdown here to dig out result permissions and other info from GeoNode
     for doc in result['rows']:
         try:
             layer = Layer.objects.get(uuid=doc['uuid'])
@@ -1677,6 +1681,15 @@ def metadata_search(request):
                 'delete': request.user.has_perm('maps.delete_layer', obj=layer),
                 'change_permissions': request.user.has_perm('maps.change_layer_permissions', obj=layer),
             }
+            if layer.topic_category:
+                doc['topic_category'] = layer.topic_category.title
+            if layer.owner:
+                doc['owner_username'] = layer.owner.username
+            if layer.temporal_extent_start:
+                doc['temporal_extent_start'] = layer.temporal_extent_start
+            if layer.temporal_extent_end:
+                doc['temporal_extent_end'] = layer.temporal_extent_end
+
         except Layer.DoesNotExist:
             doc['_local'] = False
             pass
@@ -2681,6 +2694,7 @@ def map_share(request,mapid):
 
 @login_required
 def create_pg_layer(request):
+    db_store_name = get_db_store_name(request.user)
     if request.method == 'GET':
         layer_form = LayerCreateForm(prefix="layer")
 
@@ -2708,9 +2722,9 @@ def create_pg_layer(request):
                 return HttpResponse(msg, status='400')
 
             # Assume datastore used for PostGIS
-            store = settings.DB_DATASTORE_NAME
+            store = db_store_name
             if store is None:
-                msg = 'Specified store [%s] not found' % settings.DB_DATASTORE_NAME
+                msg = 'Specified store [%s] not found' % db_store_name
                 return HttpResponse(msg, status='400')
 
             #TODO: Let users create their own schema
@@ -2735,7 +2749,7 @@ def create_pg_layer(request):
             try:
                 logger.info("Create layer %s", name)
                 layer = cat.create_native_layer(settings.DEFAULT_WORKSPACE,
-                                          settings.DB_DATASTORE_NAME,
+                                          db_store_name,
                                           name,
                                           name,
                                           escape(layer_form.cleaned_data['title']),
@@ -2892,3 +2906,28 @@ def mobilemap(request, mapid=None, snapshot=None):
         'maptitle': map_obj.title,
         'urlsuffix': get_suffix_if_custom(map_obj),
     }))
+
+
+@login_required
+def users_remove(request):
+    # delete multiple user from admin map page action
+    users = []
+    ids = ''
+    if 'ids' in request.GET:
+        ids = request.GET['ids']
+    else:
+        ids = request.POST['ids']
+    maps = Map.objects.filter(id__in=ids.split(','))
+    for map in maps:
+        if map.owner not in users:
+            users.append(map.owner)
+    if request.method == 'GET':
+        return render_to_response("maps/users_remove.html", RequestContext(request, {
+            'users': users,
+            'ids': ids,
+        }))
+    if request.method == 'POST':
+        for user in users:
+            print 'Removing user %s' % user.username
+            user.delete()
+        return HttpResponseRedirect(reverse('admin:maps_map_changelist'))
