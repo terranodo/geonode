@@ -5,18 +5,16 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
     radiusAdjust: 1.1,
 
     gradientStops: {
-        0.00: 0xffffff00,
-        0.10: 0x99e9fdff,
-        0.20: 0x00c9fcff,
-        0.30: 0x00e9fdff,
-        0.30: 0x00a5fcff,
-        0.40: 0x0078f2ff,
-        0.50: 0x0e53e9ff,
-        0.70: 0x890bbfff,
-        0.80: 0x99019aff,
-        0.90: 0x990664ff,
-        0.99: 0x660000ff,
-        1.00: 0x000000ff
+        0.00: 0x00000000,
+        0.10: 0x0000dfff,
+        0.20: 0x0000dfff,
+        0.30: 0x00effeff,
+        0.40: 0x00ff42ff,
+        0.50: 0x00ff42ff,
+        0.70: 0xfeec30ff,
+        0.80: 0xfeec30ff,
+        0.90: 0xff5f00ff,
+        1.00: 0xff0000ff
     },
 
     constructor: function(config) {
