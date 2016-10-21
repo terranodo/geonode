@@ -4,18 +4,17 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
 
     radiusAdjust: 1.1,
 
-    gradientStops: {
-        0.00: 0x00000000,
-        0.10: 0x0000dfff,
-        0.20: 0x0000dfff,
-        0.30: 0x00effeff,
-        0.40: 0x00ff42ff,
-        0.50: 0x00ff42ff,
-        0.70: 0xfeec30ff,
-        0.80: 0xfeec30ff,
-        0.90: 0xff5f00ff,
-        1.00: 0xff0000ff
-    },
+    gradientStops: [
+      0x00000000,
+      0x0000dfff,
+      0x0000dfff,
+      0x00effeff,
+      0x00ff42ff,
+      0x00ff42ff,
+      0xfeec30ff,
+      0xfeec30ff,
+      0xff5f00ff,
+      0xff0000ff],
 
     constructor: function(config) {
       var self = this;
@@ -141,8 +140,9 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
 
         var sx = dx / gridColumns;
         var sy = dy / gridRows;
-
-        this.heatmapLayer.setGradientStops(this.gradientStops);
+        var classifications = this.getClassifications(heatmap);
+        var colorGradient = this.getColorGradient(this.gradientStops, classifications);
+        this.heatmapLayer.setGradientStops(colorGradient);
 
         for (var i = 0 ; i < gridRows ; i++){
             for (var j = 0 ; j < gridColumns ; j++){
@@ -153,7 +153,8 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
                     var lon = minX + j*sx + (0.5 * sx);
                     var radius = this.computeRadius(lat, lon, sx, sy);
                     var mercator = this.WGS84ToMercator(lon, lat);
-                    var scaledValue = this.rescaleHeatmapValue(hmVal, minMaxValue);
+                    var scaledValue = Math.min(classifications[classifications.length-1] / maxValue, hmVal / maxValue);
+                    //var scaledValue = this.rescaleHeatmapValue(hmVal, minMaxValue);
                     var radiusFactor = this.getRadiusFactor();
                     this.heatmapLayer.addSource(
                       new Heatmap.Source(mercator, radius*radiusFactor*this.radiusAdjust, scaledValue)
@@ -198,6 +199,68 @@ GeoNode.BOPHeatmapModel = Ext.extend(Ext.util.Observable, {
         }
     },
 
+    getClassifications : function(facetHeatmap)
+      {
+      var flatArray = [];
+      var count = 0;
+      var maxValue = 0;
+      for (var i = 0; i < facetHeatmap.counts_ints2D.length; i++) 
+      {
+          if (facetHeatmap.counts_ints2D[i] != null)  // entire row can be null
+          for (var j = 0 ; j < facetHeatmap.counts_ints2D[i].length ; j++)
+              {
+              var currentValue = facetHeatmap.counts_ints2D[i][j];
+              if (currentValue != null) // && facetHeatmap.counts_ints2D[i][j] != 0)
+                  {
+              var flatArray = flatArray.concat(currentValue);
+              if (currentValue > maxValue) maxValue = currentValue;
+              count++;
+              
+                  }
+          }
+      };
+      // jenks classification takes too long on lots of data
+      // so we just sample larger data sets
+      reducedArray = [];
+      var period = Math.ceil(count / 300);
+      period = Math.min(period, 6);
+      if (period > 1)
+      {
+          for (i = 0 ; i < flatArray.length ; i = i + period)
+          reducedArray.push(flatArray[i]);
+          reducedArray.push(maxValue);  // make sure largest value gets in, doesn't matter much if duplicated
+      }
+      else
+          reducedArray = flatArray;
+      var series = new geostats(reducedArray);
+      numberOfClassifications = this.gradientStops.length - 1;
+      var classifications = series.getClassJenks(numberOfClassifications);
+
+      var lastExtraZero = -1;
+      for (var i = classifications.length - 1 ; i > 0 ; i--)
+          if (classifications[i] == 0 && lastExtraZero == -1)
+          lastExtraZero = i;
+      if (lastExtraZero > 0)
+          classifications = classifications.slice(lastExtraZero)
+      return classifications;
+    },
+    getColorGradient: function(colors, classifications)
+      {
+      colorGradient = {};
+      maxValue = classifications[classifications.length - 1];
+      if (classifications.length != colors.length)
+          console.log("!!! number of classifications do not match colors", classifications.length, colors.length);
+      for (var i = 0 ; i < classifications.length ; i++)
+      {
+          value = classifications[i];
+          scaledValue = value / maxValue;
+          scaledValue = Number(scaledValue.toFixed(4));
+          if (scaledValue < 0)
+          scaledValue = 0;
+          colorGradient[scaledValue] = colors[i];
+      }
+      return colorGradient;
+    },
     /**
      * Update heatmap layer after map extent was change (on zoom or pan event)
      */

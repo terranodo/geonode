@@ -164,6 +164,11 @@ Heatmap.Layer = OpenLayers.Class(OpenLayers.Layer, {
     ctx.fillStyle = grd;
     ctx.fillRect(0, 0, 256, 1);
     this.gradient = ctx.getImageData(0, 0, 256, 1).data;
+    this.gradient[0] = 0;
+    this.gradient[1] = 0;
+    this.gradient[2] = 0;
+    this.gradient[3] = 0;
+
   },
 
   /**

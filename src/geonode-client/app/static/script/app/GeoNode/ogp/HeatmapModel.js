@@ -116,14 +116,24 @@ GeoNode.HeatmapModel = Ext.extend(Ext.util.Observable, {
       success: function(response){
         var facetCounts = response.facet_counts;
         if (facetCounts != null){
-          var heatmapObject = facetCounts.facet_heatmaps.bbox;
+          //var heatmapObject = facetCounts.facet_heatmaps.bbox;
+          var heatmapObject = self._solrResponseToObject(response);
           self.heatmapObject = heatmapObject;
           self.drawHeatmapOpenLayers(heatmapObject);
         }
       }
     });
   },
-
+  _solrResponseToObject : function(data){
+    // Solr object is array of name/value pairs, convert to hash
+    heatmap = {};
+    heatmapArray = data.facet_counts.facet_heatmaps['bbox'];
+    jQuery.each(heatmapArray, function(index, value) {
+        if ((index % 2) == 0) {
+        heatmap[heatmapArray[index]] = heatmapArray[index + 1];
+        }});
+    return heatmap;
+    },
   drawHeatmapOpenLayers: function(heatmapObject){
 
     var map = this.bbox_widget.viewer.mapPanel.map;
@@ -131,50 +141,9 @@ GeoNode.HeatmapModel = Ext.extend(Ext.util.Observable, {
     if(!this.heatmapLayer){
       this.heatmapLayer = this.initHeatmapLayer();
     }
-    this.heatmapLayer.points = [];
 
-    var heatmap = heatmapObject[15];
-    if (heatmap == null){ return };
-    var stepsLatitude = heatmapObject[5];
-    var stepsLongitude = heatmapObject[3];
-    var minMaxValue = this.heatmapMinMax(heatmap, stepsLatitude, stepsLongitude);
-    var maxValue = minMaxValue[1];
-    if (maxValue == -1) return;
-    var minimumLatitude = heatmapObject[11];
-    var maximumLatitude = heatmapObject[13];
-    var deltaLatitude = maximumLatitude - minimumLatitude;
-    var minimumLongitude = heatmapObject[7];
-    var maximumLongitude = heatmapObject[9];
-    var deltaLongitude = maximumLongitude - minimumLongitude;
-
-    var stepSizeLatitude = deltaLatitude / stepsLatitude;
-    var stepSizeLongitude = deltaLongitude / stepsLongitude;
-
-    var classifications = this.getClassifications(heatmap);
-    var colorGradient = this.getColorGradient(classifications, maxValue);
-    this.heatmapLayer.setGradientStops(colorGradient);
-
-    for (var i = 0 ; i < stepsLatitude ; i++){
-      for (var j = 0 ; j < stepsLongitude ; j++){
-        try{
-          var heatmapValue = heatmap[heatmap.length - i - 1][j];
-          var currentLongitude = minimumLongitude + (j * stepSizeLongitude) + (.5 * stepSizeLongitude);
-          var currentLatitude = minimumLatitude + (i * stepSizeLatitude) + (.5 * stepSizeLatitude);
-          var radius = this.computeRadius(currentLatitude, currentLongitude, stepSizeLatitude, stepSizeLongitude);
-          var mercator = this.WGS84ToMercator(currentLongitude, currentLatitude);
-          var scaledValue = this.rescaleHeatmapValue(heatmapValue, classifications[1], maxValue);
-          var radiusFactor = this.getRadiusFactor();
-          if (heatmapValue > 0)
-          {
-              this.heatmapLayer.addSource(new Heatmap.Source(mercator, radius*radiusFactor*this.radiusAdjust, scaledValue));
-          }
-        }
-        catch (error){
-          console.log("error making heatmap: " + error);
-        }
-      }
-    }
-    this.heatmapLayer.setOpacity(0.50);
+    var classifications = this.getClassifications(heatmapObject);
+    this.renderHeatmap(heatmapObject, classifications);
 
     if(map.getLayersByName("Heatmap").length == 0){
       map.addLayer(this.heatmapLayer);
@@ -183,7 +152,47 @@ GeoNode.HeatmapModel = Ext.extend(Ext.util.Observable, {
       this.heatmapLayer.redraw();
     }
   },
+  renderHeatmap : function(facetHeatmap, classifications)
+    {
+    var self = this;
+    var map = this.bbox_widget.viewer.mapPanel.map;
+    var maxValue = classifications[classifications.length - 1]; 
+    this.heatmapLayer.points = [];
+    var colorGradient = this.getColorGradient(this.getColors(), classifications);
+    this.heatmapLayer.setGradientStops(colorGradient);
+    this.heatmapLayer.setOpacity(0.50);
 
+    var extent = map.getExtent();
+    var mapLowerLeft = new OpenLayers.LonLat(extent.left, extent.bottom);
+    var mapUpperRight = new OpenLayers.LonLat(extent.right, extent.top);
+    var geodeticProjection = new OpenLayers.Projection("EPSG:4326");
+    var mapLowerLeftGeodetic = mapLowerLeft.transform(map.getProjectionObject(), geodeticProjection);
+    var mapUpperRightGeodetic = mapUpperRight.transform(map.getProjectionObject(), geodeticProjection);
+
+    // cells size is also used on mouse click to define item capture distance
+    var heatmapCellSize = Math.ceil(this.getCellSize(facetHeatmap, map));
+    var latitudeStepSize = (facetHeatmap.maxY - facetHeatmap.minY) / facetHeatmap.rows;
+    var longitudeStepSize = (facetHeatmap.maxX - facetHeatmap.minX) / facetHeatmap.columns;
+    var countsArray = facetHeatmap.counts_ints2D;
+
+    // iterate over cell values and create heatmap items
+    jQuery.each(countsArray, function(rowNumber, currentRow){
+        if (currentRow == null) return;
+        jQuery.each(currentRow, function(columnNumber, value){
+        if (value == null || value <= 0) return;
+
+        var latitude = facetHeatmap.minY + ((facetHeatmap.rows - rowNumber- 1) * latitudeStepSize) + (latitudeStepSize * .5); 
+        var longitude = facetHeatmap.minX + (columnNumber * longitudeStepSize) + (longitudeStepSize * .5);
+        var geodetic = new OpenLayers.LonLat(longitude, latitude); 
+        if (geodetic.lat > mapUpperRightGeodetic.lat || geodetic.lat < mapLowerLeftGeodetic.lat
+            || geodetic.lon > mapUpperRightGeodetic.lon || geodetic.lon < mapLowerLeftGeodetic.lon)
+        {return};  // point not on map
+        var transformed = geodetic.transform(geodeticProjection, map.getProjectionObject());
+        var tmpValue = Math.min(classifications[classifications.length-1] / maxValue, value / maxValue);
+        self.heatmapLayer.addSource(new Heatmap.Source(transformed, heatmapCellSize, tmpValue));
+        })
+    });
+  },
   getRadiusFactor: function(){
       var factor = [1.6, 1.5, 2.6, 2.4, 2.2, 1.8, 2., 2., 2.];
       var zoomLevel = this.bbox_widget.viewer.mapPanel.map.getZoom();
@@ -233,34 +242,55 @@ GeoNode.HeatmapModel = Ext.extend(Ext.util.Observable, {
     }
   },
 
-  flattenValues: function(heatmap){
-    var tmp = [];
-    for (var i = 0 ; i < heatmap.length ; i++){
-      tmp.push.apply(tmp, heatmap[i]);
-    }
-    return tmp;
-  },
-
   /**
     uses a Jenks algorithm with 5 classifications
     the library supports many more options
   */
-  getClassifications: function(heatmap)
+  getClassifications : function(facetHeatmap)
   {
-    var flattenedValues = this.flattenValues(heatmap);
-    var series = new geostats(flattenedValues);
-
-    var jenksClassifications = series.getClassJenks(this.getColors().length);
-
-    for (var i = 0 ; i < jenksClassifications.length; i++){
-      if (jenksClassifications[i] < 0){
-        jenksClassifications[i] = 0;
+  var flatArray = [];
+  var count = 0;
+  var maxValue = 0;
+  for (var i = 0; i < facetHeatmap.counts_ints2D.length; i++) 
+  {
+      if (facetHeatmap.counts_ints2D[i] != null)  // entire row can be null
+      for (var j = 0 ; j < facetHeatmap.counts_ints2D[i].length ; j++)
+          {
+          var currentValue = facetHeatmap.counts_ints2D[i][j];
+          if (currentValue != null) // && facetHeatmap.counts_ints2D[i][j] != 0)
+              {
+          var flatArray = flatArray.concat(currentValue);
+          if (currentValue > maxValue) maxValue = currentValue;
+          count++;
+          
+              }
       }
-    }
+  };
+  // jenks classification takes too long on lots of data
+  // so we just sample larger data sets
+  reducedArray = [];
+  var period = Math.ceil(count / 300);
+  period = Math.min(period, 6);
+  if (period > 1)
+  {
+      for (i = 0 ; i < flatArray.length ; i = i + period)
+      reducedArray.push(flatArray[i]);
+      reducedArray.push(maxValue);  // make sure largest value gets in, doesn't matter much if duplicated
+  }
+  else
+      reducedArray = flatArray;
+  var series = new geostats(reducedArray);
+  numberOfClassifications = this.getColors().length - 1;
+  var classifications = series.getClassJenks(numberOfClassifications);
 
-    return this.cleanupClassifications(jenksClassifications);
+  var lastExtraZero = -1;
+  for (var i = classifications.length - 1 ; i > 0 ; i--)
+      if (classifications[i] == 0 && lastExtraZero == -1)
+      lastExtraZero = i;
+  if (lastExtraZero > 0)
+      classifications = classifications.slice(lastExtraZero)
+  return classifications;
   },
-
   cleanupClassifications: function(classifications){
     // classifications with multiple 0 can cause problems
     var lastZero = classifications.lastIndexOf(0);
@@ -271,6 +301,19 @@ GeoNode.HeatmapModel = Ext.extend(Ext.util.Observable, {
     return classifications;
   },
 
+  getCellSize: function(facetHeatmap, map)
+  {
+  var mapSize = map.getSize();
+  var widthInPixels = mapSize.w;
+  var heightInPixels = mapSize.h;
+  var heatmapRows = facetHeatmap.rows;
+  var heatmapColumns = facetHeatmap.columns;
+  var sizeX = widthInPixels / heatmapColumns;
+  var sizeY = heightInPixels / heatmapRows;
+  var size = Math.max(sizeX, sizeY);
+  return size; 
+  },
+
   getColors: function(){
     return [0x00000000, 0x0000dfff, 0x00effeff, 0x00ff42ff, 0xfeec30ff, 0xff5f00ff, 0xff0000ff];
   },
@@ -278,66 +321,36 @@ GeoNode.HeatmapModel = Ext.extend(Ext.util.Observable, {
   /*
     convert Jenks classifications to Brewer colors
   */
-  getColorGradient: function(classifications, maxValue){
-
-    var colors = this.getColors();
-    var colorGradient = {};
-    var classes = classifications.length;
-    if(classifications.length == 8){
-      classes -= 1;
-    }
-    for (var i = 0 ; i < classes; i++){
-      var value = classifications[i];
-      var scaledValue = this.rescaleHeatmapValue(value, classifications[0], maxValue);
-      if (scaledValue < 0){
+   getColorGradient: function(colors, classifications)
+    {
+    colorGradient = {};
+    maxValue = classifications[classifications.length - 1];
+    if (classifications.length != colors.length)
+        console.log("!!! number of classifications do not match colors", classifications.length, colors.length);
+    for (var i = 0 ; i < classifications.length ; i++)
+    {
+        value = classifications[i];
+        scaledValue = value / maxValue;
+        scaledValue = Number(scaledValue.toFixed(4));
+        if (scaledValue < 0)
         scaledValue = 0;
-      }
-      colorGradient[scaledValue] = colors[i];
+        colorGradient[scaledValue] = colors[i];
     }
     return colorGradient;
-  },
-
-  rescaleHeatmapValue: function(value, min, max){
-    if (value == null){
-      return 0;
-    };
-
-    if (value == -1){
-      return -1;
-    };
-
-    if (value == 0){
-      return 0;
-    };
-
-    value = value * 1.0;
-    return value / max;
-  },
-
-  computeRadius: function(latitude, longitude, latitudeStepSize, longitudeStepSize){
-    var mercator1 = this.WGS84ToMercator(longitude, latitude);
-    var pixel1 = this.bbox_widget.viewer.mapPanel.map.getPixelFromLonLat(mercator1);
-    var mercator2 = this.WGS84ToMercator(longitude + longitudeStepSize, latitude + latitudeStepSize);
-    var pixel2 = this.bbox_widget.viewer.mapPanel.map.getPixelFromLonLat(mercator2);
-    var deltaLatitude = Math.abs(pixel1.x - pixel2.x);
-    var deltaLongitude = Math.abs(pixel1.y - pixel2.y);
-    var delta = Math.max(deltaLatitude, deltaLongitude);
-    return Math.ceil(delta / 2.);
-  },
+    },
 
   getCountGeodetic: function(heatmapObject, latitude, longitude){
-    var heatmap = heatmapObject[15];
-      if (heatmap == null)
+      if (heatmapObject == null)
         return;
-      var minimumLatitude = heatmapObject[11];
-      var maximumLatitude = heatmapObject[13];
+      var minimumLatitude = heatmapObject.minY;
+      var maximumLatitude = heatmapObject.maxY;
       var deltaLatitude = maximumLatitude - minimumLatitude;
-      var minimumLongitude = heatmapObject[7];
-      var maximumLongitude = heatmapObject[9];
+      var minimumLongitude = heatmapObject.minX;
+      var maximumLongitude = heatmapObject.maxX;
       var deltaLongitude = maximumLongitude - minimumLongitude;
 
-      var stepsLatitude = heatmap.length;
-      var stepsLongitude = heatmap[0].length;
+      var stepsLatitude = heatmapObject.rows;
+      var stepsLongitude = heatmapObject.columns;
       var stepSizeLatitude = deltaLatitude / stepsLatitude;
       var stepSizeLongitude = deltaLongitude / stepsLongitude;
 
@@ -347,12 +360,12 @@ GeoNode.HeatmapModel = Ext.extend(Ext.util.Observable, {
       if (latitudeIndex < 0) latitudeIndex = 0;
       if (longitudeIndex < 0) longitudeIndex = 0;
       try{
-        var heatmapValue = heatmap[heatmap.length - latitudeIndex - 1][longitudeIndex];
+        var heatmapValue = heatmapObject.counts_ints2D[heatmapObject.counts_ints2D.length - latitudeIndex - 1][longitudeIndex];
         return heatmapValue;
       }
         catch (err)
       {
-        return heatmap[0][0];
+        return heatmap.counts_ints2D[0][0];
       }
   },
 
